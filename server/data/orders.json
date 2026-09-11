@@ -1,0 +1,100 @@
+[
+  {
+    "id": "ORD-2026-004",
+    "createdAt": "2026-09-11T07:17:07.422Z",
+    "requesterName": "กานต์ ประเสริฐ",
+    "company": "True",
+    "department": "Technology",
+    "reason": "พนักงานใหม่",
+    "reasonDetail": "โต๊ะทำงานใหม่ ชั้น 4",
+    "status": "APPROVED",
+    "approvedBy": "พี่น้ำ",
+    "approvedAt": "2026-09-11T07:17:13.203Z",
+    "items": [
+      {
+        "itemId": "item-001",
+        "itemName": "กระดาษถ่ายเอกสาร A4 (Double A 80 แกรม)",
+        "quantity": 3,
+        "unit": "รีม"
+      }
+    ]
+  },
+  {
+    "id": "ORD-2026-001",
+    "createdAt": "2026-09-10T10:30:00.000Z",
+    "requesterName": "สมชาย ใจดี",
+    "company": "Illu",
+    "department": "Marketing",
+    "reason": "พนักงานใหม่",
+    "reasonDetail": "เริ่มงานแผนกการตลาด วันที่ 15 ก.ย.",
+    "status": "APPROVED",
+    "approvedBy": "พี่น้ำ",
+    "approvedAt": "2026-09-10T14:15:00.000Z",
+    "items": [
+      {
+        "itemId": "item-008",
+        "itemName": "เมาส์ไร้สาย Silent Wireless Mouse (Logitech)",
+        "quantity": 1,
+        "unit": "ตัว"
+      },
+      {
+        "itemId": "item-009",
+        "itemName": "คีย์บอร์ดไร้สาย Wireless Keyboard (Thai/Eng)",
+        "quantity": 1,
+        "unit": "ตัว"
+      },
+      {
+        "itemId": "item-002",
+        "itemName": "ปากกาลูกลื่น หมึกน้ำเงิน 0.5 มม.",
+        "quantity": 2,
+        "unit": "ด้าม"
+      }
+    ]
+  },
+  {
+    "id": "ORD-2026-002",
+    "createdAt": "2026-09-11T08:45:00.000Z",
+    "requesterName": "วิภาดา รักงาน",
+    "company": "LL",
+    "department": "HR & Admin",
+    "reason": "ชำรุด",
+    "reasonDetail": "เครื่องเย็บกระดาษตัวเดิมสปริงหัก กดไม่ลง",
+    "status": "PENDING",
+    "approvedBy": null,
+    "approvedAt": null,
+    "items": [
+      {
+        "itemId": "item-005",
+        "itemName": "เครื่องเย็บกระดาษ No. 10 (MAX)",
+        "quantity": 1,
+        "unit": "ตัว"
+      },
+      {
+        "itemId": "item-004",
+        "itemName": "ลวดเย็บกระดาษ No. 10 (กล่องละ 1,000 ตัว)",
+        "quantity": 2,
+        "unit": "กล่อง"
+      }
+    ]
+  },
+  {
+    "id": "ORD-2026-003",
+    "createdAt": "2026-09-11T09:15:00.000Z",
+    "requesterName": "ธนกร สุขสวัสดิ์",
+    "company": "True",
+    "department": "Product Team",
+    "reason": "ไม่เคยได้รับ",
+    "reasonDetail": "ต้องใช้พรีเซนต์งานลูกค้าในห้องประชุม",
+    "status": "PENDING",
+    "approvedBy": null,
+    "approvedAt": null,
+    "items": [
+      {
+        "itemId": "item-010",
+        "itemName": "สายแปลง USB-C to HDMI 4K Adapter",
+        "quantity": 1,
+        "unit": "เส้น"
+      }
+    ]
+  }
+]
