@@ -355,7 +355,7 @@ if (fs.existsSync(distPath)) {
   });
 }
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`=================================================`);
   console.log(` Office Requisition Server is running on port ${PORT}`);
   console.log(` http://localhost:${PORT}`);
