@@ -2,155 +2,121 @@ import React from 'react';
 import { 
   Package, 
   ShoppingCart, 
-  ClipboardList, 
+  Menu, 
+  Search, 
   ShieldCheck, 
-  UserCheck, 
-  BarChart3, 
-  Boxes, 
-  LogOut,
-  Sparkles
+  LogOut, 
+  Building,
+  Bell,
+  Coins
 } from 'lucide-react';
 
 export default function Navbar({ 
-  currentRole, 
-  setCurrentRole, 
-  activeTab, 
-  setActiveTab, 
+  onToggleSidebar, 
   cartCount, 
-  openCartModal,
-  pendingApprovalCount,
-  onAdminLoginClick
+  onOpenCart, 
+  currentRole, 
+  onSwitchRole, 
+  currentDepartment, 
+  onSelectDepartment, 
+  departments,
+  onQuickSearch
 }) {
+  const selectedDept = departments.find(d => d.id === currentDepartment) || departments[0];
+  const remainingBudget = selectedDept ? selectedDept.totalBudget - selectedDept.spentBudget : 0;
+
   return (
-    <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm">
+    <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-2xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Brand Logo & Name */}
-          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab(currentRole === 'ADMIN' ? 'admin-approvals' : 'catalog')}>
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-md shadow-emerald-500/20">
-              <Package className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="font-bold text-lg text-slate-800 tracking-tight">Office Supply</span>
-                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-800">
-                  ระบบสั่งซื้ออุปกรณ์
-                </span>
+        <div className="flex items-center justify-between h-16 gap-3">
+          
+          {/* Left: Mobile Menu & Logo */}
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={onToggleSidebar}
+              className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 lg:hidden transition-colors"
+              title="เปิดเมนู"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center space-x-2.5 cursor-pointer">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+                <Package className="w-5 h-5" />
               </div>
-              <p className="text-xs text-slate-400 hidden sm:block">
-                เครือ Illu • LL • True
-              </p>
+              <div className="hidden sm:block">
+                <div className="flex items-center space-x-1.5">
+                  <span className="font-bold text-base text-slate-900 tracking-tight">Office Supply</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-800">
+                    Requisition
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">ระบบสั่งซื้อและเบิกอุปกรณ์สำนักงาน</p>
+              </div>
             </div>
           </div>
 
-          {/* Center Navigation Tabs */}
-          <nav className="hidden md:flex items-center space-x-1">
-            {currentRole === 'EMPLOYEE' ? (
-              <>
-                <button
-                  onClick={() => setActiveTab('catalog')}
-                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-all ${
-                    activeTab === 'catalog'
-                      ? 'bg-emerald-50 text-emerald-700 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <Boxes className="w-4 h-4" />
-                  <span>รายการอุปกรณ์</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('tracking')}
-                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-all ${
-                    activeTab === 'tracking'
-                      ? 'bg-emerald-50 text-emerald-700 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <ClipboardList className="w-4 h-4" />
-                  <span>ติดตามคำขอของฉัน</span>
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => setActiveTab('admin-approvals')}
-                  className={`relative flex items-center space-x-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-all ${
-                    activeTab === 'admin-approvals'
-                      ? 'bg-indigo-50 text-indigo-700 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>รออนุมัติ (พี่น้ำ)</span>
-                  {pendingApprovalCount > 0 && (
-                    <span className="ml-1.5 px-2 py-0.5 text-xs font-bold rounded-full bg-rose-500 text-white animate-soft-pulse">
-                      {pendingApprovalCount}
-                    </span>
-                  )}
-                </button>
-                <button
-                  onClick={() => setActiveTab('admin-inventory')}
-                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-all ${
-                    activeTab === 'admin-inventory'
-                      ? 'bg-indigo-50 text-indigo-700 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <Boxes className="w-4 h-4" />
-                  <span>จัดการสินค้า & สต็อก</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('admin-dashboard')}
-                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-all ${
-                    activeTab === 'admin-dashboard'
-                      ? 'bg-indigo-50 text-indigo-700 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <BarChart3 className="w-4 h-4" />
-                  <span>สรุปภาพรวม & รายงาน</span>
-                </button>
-              </>
-            )}
-          </nav>
-
-          {/* Right Action: Cart & Role Switcher */}
-          <div className="flex items-center space-x-3">
-            {/* Cart Button (Always accessible or when items in cart) */}
-            <button
-              onClick={openCartModal}
-              className="relative flex items-center space-x-2 px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors text-slate-700 shadow-sm"
-              title="ดูรายการที่เลือกเพื่อขอเบิก"
+          {/* Middle: Department Budget Pill (Active Department) */}
+          <div className="hidden md:flex items-center space-x-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
+            <div className="flex items-center space-x-1.5 text-xs text-slate-500">
+              <Building className="w-3.5 h-3.5 text-blue-600" />
+              <span>แผนก:</span>
+            </div>
+            <select
+              value={currentDepartment}
+              onChange={(e) => onSelectDepartment(e.target.value)}
+              className="text-xs font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
             >
-              <ShoppingCart className="w-4 h-4 text-emerald-600" />
-              <span className="text-sm font-medium hidden sm:inline">คำขอเบิก</span>
-              {cartCount > 0 && (
-                <span className="flex items-center justify-center w-5 h-5 text-xs font-bold rounded-full bg-emerald-600 text-white">
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+            <div className="h-4 w-[1px] bg-slate-200 mx-1" />
+            <div className="flex items-center space-x-1 text-xs">
+              <Coins className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="text-slate-500 text-[11px]">งบเหลือ:</span>
+              <strong className="text-emerald-700 font-bold">฿{remainingBudget.toLocaleString()}</strong>
+            </div>
+          </div>
+
+          {/* Right Actions: Cart & Role Switcher */}
+          <div className="flex items-center space-x-2.5">
+            {/* Cart Button with Counter Badge */}
+            <button
+              onClick={onOpenCart}
+              className="relative flex items-center space-x-2 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-all text-slate-700 shadow-2xs group"
+              title="ดูตะกร้าเบิกสินค้า"
+            >
+              <ShoppingCart className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
+              <span className="text-xs font-semibold hidden sm:inline">ตะกร้าเบิก</span>
+              {cartCount > 0 ? (
+                <span className="flex items-center justify-center px-1.5 min-w-[20px] h-5 text-[11px] font-bold rounded-full bg-blue-600 text-white animate-soft-pulse">
                   {cartCount}
                 </span>
+              ) : (
+                <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">(0)</span>
               )}
             </button>
 
-            {/* Role Switcher Pill */}
+            {/* Role Switcher Pill (Employee vs Approver พี่น้ำ) */}
             {currentRole === 'EMPLOYEE' ? (
               <button
-                onClick={onAdminLoginClick}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-200"
+                onClick={onSwitchRole}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-200 shadow-2xs"
               >
                 <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
-                <span className="hidden sm:inline">เข้าสู่โหมด</span>
+                <span className="hidden sm:inline">สลับไป</span>
                 <span className="font-semibold text-indigo-700">พี่น้ำ (ผู้อนุมัติ)</span>
               </button>
             ) : (
-              <div className="flex items-center space-x-1 bg-indigo-50 border border-indigo-200 py-1 px-2.5 rounded-full">
+              <div className="flex items-center space-x-1.5 bg-indigo-50 border border-indigo-200 py-1 px-3 rounded-full">
                 <span className="inline-block w-2 h-2 rounded-full bg-indigo-600 animate-ping"></span>
-                <span className="text-xs font-semibold text-indigo-900">พี่น้ำ (Admin)</span>
+                <span className="text-xs font-bold text-indigo-900">โหมดพี่น้ำ (ผู้อนุมัติ)</span>
                 <button
-                  onClick={() => {
-                    setCurrentRole('EMPLOYEE');
-                    setActiveTab('catalog');
-                  }}
-                  className="ml-1 p-1 hover:bg-indigo-200 rounded-full text-indigo-600 transition-colors"
+                  onClick={onSwitchRole}
+                  className="p-1 hover:bg-indigo-200 rounded-full text-indigo-600 transition-colors ml-1"
                   title="กลับสู่โหมดพนักงาน"
                 >
                   <LogOut className="w-3.5 h-3.5" />
@@ -158,57 +124,7 @@ export default function Navbar({
               </div>
             )}
           </div>
-        </div>
 
-        {/* Mobile Sub-Navigation */}
-        <div className="flex md:hidden items-center justify-around py-2 border-t border-slate-100 overflow-x-auto text-xs">
-          {currentRole === 'EMPLOYEE' ? (
-            <>
-              <button
-                onClick={() => setActiveTab('catalog')}
-                className={`py-1 px-2.5 rounded-md font-medium ${
-                  activeTab === 'catalog' ? 'bg-emerald-100 text-emerald-800' : 'text-slate-600'
-                }`}
-              >
-                รายการอุปกรณ์
-              </button>
-              <button
-                onClick={() => setActiveTab('tracking')}
-                className={`py-1 px-2.5 rounded-md font-medium ${
-                  activeTab === 'tracking' ? 'bg-emerald-100 text-emerald-800' : 'text-slate-600'
-                }`}
-              >
-                ติดตามคำขอ
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={() => setActiveTab('admin-approvals')}
-                className={`py-1 px-2.5 rounded-md font-medium ${
-                  activeTab === 'admin-approvals' ? 'bg-indigo-100 text-indigo-800' : 'text-slate-600'
-                }`}
-              >
-                รออนุมัติ ({pendingApprovalCount})
-              </button>
-              <button
-                onClick={() => setActiveTab('admin-inventory')}
-                className={`py-1 px-2.5 rounded-md font-medium ${
-                  activeTab === 'admin-inventory' ? 'bg-indigo-100 text-indigo-800' : 'text-slate-600'
-                }`}
-              >
-                จัดการสต็อก
-              </button>
-              <button
-                onClick={() => setActiveTab('admin-dashboard')}
-                className={`py-1 px-2.5 rounded-md font-medium ${
-                  activeTab === 'admin-dashboard' ? 'bg-indigo-100 text-indigo-800' : 'text-slate-600'
-                }`}
-              >
-                สรุปภาพรวม
-              </button>
-            </>
-          )}
         </div>
       </div>
     </header>
