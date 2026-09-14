@@ -16,16 +16,21 @@ import {
 export default function AdminDashboard({ orders, items, stats }) {
   // Compute breakdown by company
   const companyStats = {
-    Illu: { count: 0, totalItems: 0 },
-    LL: { count: 0, totalItems: 0 },
-    True: { count: 0, totalItems: 0 }
+    'Illuspace (Thailand) Co., Ltd.': { count: 0, totalItems: 0 },
+    'Live Lighting Co., Ltd.': { count: 0, totalItems: 0 },
+    'True Innovation Tech Co., Ltd.': { count: 0, totalItems: 0 }
   };
 
   orders.forEach(o => {
-    if (companyStats[o.company]) {
-      companyStats[o.company].count++;
+    let key = o.company;
+    if (key === 'Illu' || key?.includes('Illuspace')) key = 'Illuspace (Thailand) Co., Ltd.';
+    else if (key === 'LL' || key?.includes('Live Lighting')) key = 'Live Lighting Co., Ltd.';
+    else if (key === 'True' || key?.includes('True Innovation')) key = 'True Innovation Tech Co., Ltd.';
+
+    if (companyStats[key]) {
+      companyStats[key].count++;
       const itemsQty = o.items.reduce((sum, i) => sum + (i.quantity || 0), 0);
-      companyStats[o.company].totalItems += itemsQty;
+      companyStats[key].totalItems += itemsQty;
     }
   });
 
@@ -102,7 +107,7 @@ export default function AdminDashboard({ orders, items, stats }) {
             <span>แดชบอร์ดสรุปภาพรวมคำสั่งซื้อและอุปกรณ์</span>
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            สถิติการสั่งซื้อของบริษัท Illu, LL, True และวิเคราะห์รายการเบิก
+            สถิติการสั่งซื้อของเครือบริษัท (Illuspace / Live Lighting / True Innovation Tech) และวิเคราะห์รายการเบิก
           </p>
         </div>
 
@@ -128,7 +133,7 @@ export default function AdminDashboard({ orders, items, stats }) {
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between text-amber-600 mb-2">
-            <span className="text-xs font-semibold">รอพี่น้ำอนุมัติ</span>
+            <span className="text-xs font-semibold">รอ Admin อนุมัติ</span>
             <Clock className="w-4 h-4 text-amber-500" />
           </div>
           <div className="text-2xl font-bold text-amber-600">
@@ -166,15 +171,15 @@ export default function AdminDashboard({ orders, items, stats }) {
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <h3 className="text-base font-bold text-slate-800 flex items-center space-x-2">
               <Building2 className="w-4 h-4 text-indigo-600" />
-              <span>สรุปยอดคำสั่งซื้อตามบริษัท (Illu / LL / True)</span>
+              <span>สรุปยอดคำสั่งซื้อตามบริษัท</span>
             </h3>
           </div>
 
           <div className="space-y-3">
             {[
-              { id: 'Illu', name: 'บริษัท Illu (อิลลู)', color: 'bg-blue-500', barBg: 'bg-blue-100', stats: companyStats.Illu },
-              { id: 'LL', name: 'บริษัท LL (แอลแอล)', color: 'bg-purple-500', barBg: 'bg-purple-100', stats: companyStats.LL },
-              { id: 'True', name: 'บริษัท True (ทรู)', color: 'bg-rose-500', barBg: 'bg-rose-100', stats: companyStats.True }
+              { id: 'Illuspace', name: 'Illuspace (Thailand) Co., Ltd.', color: 'bg-blue-500', barBg: 'bg-blue-100', stats: companyStats['Illuspace (Thailand) Co., Ltd.'] },
+              { id: 'Live Lighting', name: 'Live Lighting Co., Ltd.', color: 'bg-purple-500', barBg: 'bg-purple-100', stats: companyStats['Live Lighting Co., Ltd.'] },
+              { id: 'True Innovation', name: 'True Innovation Tech Co., Ltd.', color: 'bg-rose-500', barBg: 'bg-rose-100', stats: companyStats['True Innovation Tech Co., Ltd.'] }
             ].map(comp => {
               const pct = orders.length > 0 ? Math.round((comp.stats.count / orders.length) * 100) : 0;
 

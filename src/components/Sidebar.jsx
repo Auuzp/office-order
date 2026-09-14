@@ -37,13 +37,20 @@ export default function Sidebar({
   ];
 
   if (currentRole === 'ADMIN') {
-    navItems.push({
-      id: 'admin-approvals',
-      label: 'ระบบอนุมัติ (พี่น้ำ)',
-      icon: ShieldCheck,
-      badge: pendingCount > 0 ? pendingCount : null,
-      badgeColor: 'bg-rose-500 text-white animate-soft-pulse'
-    });
+    navItems.push(
+      {
+        id: 'admin-approvals',
+        label: 'ระบบอนุมัติคำสั่งซื้อ (Admin)',
+        icon: ShieldCheck,
+        badge: pendingCount > 0 ? pendingCount : null,
+        badgeColor: 'bg-rose-500 text-white animate-soft-pulse'
+      },
+      {
+        id: 'admin-inventory',
+        label: 'จัดการรายการอุปกรณ์ (Admin)',
+        icon: Boxes
+      }
+    );
   }
 
   const handleNav = (tabId) => {

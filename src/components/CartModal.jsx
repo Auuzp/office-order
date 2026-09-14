@@ -30,7 +30,7 @@ export default function CartModal({
   isSubmitting 
 }) {
   const [requesterName, setRequesterName] = useState('');
-  const [company, setCompany] = useState('Illu');
+  const [company, setCompany] = useState('Illuspace (Thailand) Co., Ltd.');
   const [selectedDeptId, setSelectedDeptId] = useState(currentDepartment || 'IT');
   const [reason, setReason] = useState('ชำรุด');
   const [priority, setPriority] = useState('ปกติ');
@@ -248,7 +248,7 @@ export default function CartModal({
                 <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs">2</span>
                 <span>บริษัทของ User <span className="text-rose-500">*</span></span>
               </label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {COMPANIES.map((c) => {
                   const isSelected = company === c.id;
                   return (
@@ -256,13 +256,14 @@ export default function CartModal({
                       type="button"
                       key={c.id}
                       onClick={() => setCompany(c.id)}
-                      className={`py-2 px-2.5 rounded-xl border text-center text-xs font-bold transition-all ${
+                      className={`py-2 px-2.5 rounded-xl border text-center text-xs font-bold transition-all flex flex-col justify-center items-center ${
                         isSelected
                           ? 'border-blue-600 bg-blue-50 text-blue-700 ring-2 ring-blue-500/20 shadow-2xs'
                           : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                       }`}
                     >
-                      {c.id}
+                      <span className="font-extrabold text-[12px]">{c.shortName}</span>
+                      <span className="text-[10px] opacity-75 leading-tight mt-0.5">{c.name}</span>
                     </button>
                   );
                 })}

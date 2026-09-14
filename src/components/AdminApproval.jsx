@@ -13,6 +13,7 @@ import {
   Check,
   X
 } from 'lucide-react';
+import { getFullCompanyName, getCompanyBadgeClass } from '../data/mockData';
 
 export default function AdminApproval({ 
   orders, 
@@ -30,9 +31,14 @@ export default function AdminApproval({
   // Filter orders
   const filteredOrders = orders.filter(order => {
     const matchStatus = activeSubTab === 'ALL' || order.status === activeSubTab;
-    const matchCompany = selectedCompany === 'ALL' || order.company === selectedCompany;
+    const matchCompany = selectedCompany === 'ALL' || 
+      order.company === selectedCompany ||
+      (selectedCompany.includes('Illuspace') && (order.company === 'Illu' || order.company?.includes('Illuspace'))) ||
+      (selectedCompany.includes('Live Lighting') && (order.company === 'LL' || order.company?.includes('Live Lighting'))) ||
+      (selectedCompany.includes('True Innovation') && (order.company === 'True' || order.company?.includes('True')));
     return matchStatus && matchCompany;
   });
+
 
   const pendingCount = orders.filter(o => o.status === 'PENDING').length;
   const approvedCount = orders.filter(o => o.status === 'APPROVED').length;
@@ -79,10 +85,10 @@ export default function AdminApproval({
             <span>โหมดผู้ดูแลระบบ / ผู้อนุมัติ</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
-            ระบบอนุมัติคำสั่งซื้ออุปกรณ์ (พี่น้ำ)
+            ระบบอนุมัติคำสั่งซื้ออุปกรณ์ (Admin)
           </h1>
           <p className="text-indigo-200 text-sm max-w-2xl leading-relaxed">
-            ตรวจสอบความถูกต้องของคำขอเบิกจากพนักงานบริษัท Illu, LL, และ True เมื่อพี่น้ำกด "อนุมัติ" ระบบจะทำการตัดยอดสต็อกคงเหลือในระบบทันที
+            ตรวจสอบความถูกต้องของคำขอเบิกจากพนักงานบริษัท Illuspace (Thailand) Co., Ltd., Live Lighting Co., Ltd. และ True Innovation Tech Co., Ltd. เมื่อ Admin กด "อนุมัติ" ระบบจะทำการบันทึกและตัดสต็อกอุปกรณ์ทันที
           </p>
         </div>
       </div>
@@ -156,17 +162,22 @@ export default function AdminApproval({
         <div className="flex items-center space-x-2 self-end sm:self-center">
           <span className="text-xs font-semibold text-slate-500">กรองบริษัท:</span>
           <div className="flex bg-slate-100 p-1 rounded-lg">
-            {['ALL', 'Illu', 'LL', 'True'].map((comp) => (
+            {[
+              { id: 'ALL', label: 'ทั้งหมด' },
+              { id: 'Illuspace (Thailand) Co., Ltd.', label: 'Illuspace' },
+              { id: 'Live Lighting Co., Ltd.', label: 'Live Lighting' },
+              { id: 'True Innovation Tech Co., Ltd.', label: 'True Innovation' },
+            ].map((comp) => (
               <button
-                key={comp}
-                onClick={() => setSelectedCompany(comp)}
+                key={comp.id}
+                onClick={() => setSelectedCompany(comp.id)}
                 className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-                  selectedCompany === comp
+                  selectedCompany === comp.id
                     ? 'bg-white text-slate-900 shadow-sm font-bold'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                {comp === 'ALL' ? 'ทั้งหมด' : comp}
+                {comp.label}
               </button>
             ))}
           </div>
@@ -184,7 +195,7 @@ export default function AdminApproval({
           </h3>
           <p className="text-sm text-slate-500">
             {activeSubTab === 'PENDING' 
-              ? 'พี่น้ำได้ตรวจสอบและอนุมัติคำขอสั่งซื้อครบถ้วนทั้งหมดแล้วครับ' 
+              ? 'ผู้ดูแลระบบ (Admin) ได้ตรวจสอบและอนุมัติคำขอสั่งซื้อครบถ้วนทั้งหมดแล้วครับ' 
               : 'ลองเปลี่ยนตัวกรองบริษัทหรือสถานะอื่นๆ ดูนะครับ'}
           </p>
         </div>
@@ -225,24 +236,21 @@ export default function AdminApproval({
                     <span className="font-mono text-sm font-bold text-slate-900 bg-white border border-slate-200 px-2.5 py-1 rounded-md shadow-xs">
                       {order.id}
                     </span>
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                      order.company === 'Illu' ? 'bg-blue-100 text-blue-800 border-blue-200' :
-                      order.company === 'LL' ? 'bg-purple-100 text-purple-800 border-purple-200' :
-                      'bg-rose-100 text-rose-800 border-rose-200'
-                    }`}>
-                      {order.company}
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${getCompanyBadgeClass(order.company)}`}>
+                      {getFullCompanyName(order.company)}
                     </span>
                     <span className="px-2 py-0.5 rounded-md text-xs font-medium bg-slate-200 text-slate-700">
                       เหตุผล: <strong>{order.reason}</strong>
                     </span>
                   </div>
 
+
                   {/* Status Indicator */}
                   <div>
                     {isPending && (
                       <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
                         <Clock className="w-3.5 h-3.5 text-amber-700" />
-                        <span>รอการอนุมัติจากพี่น้ำ</span>
+                        <span>รอการอนุมัติจาก Admin</span>
                       </span>
                     )}
                     {isApproved && (
@@ -345,9 +353,9 @@ export default function AdminApproval({
                     <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs flex items-center justify-between">
                       <div className="flex items-center space-x-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        <span>อนุมัติโดย <strong>{order.approvedBy || 'พี่น้ำ'}</strong> เมื่อ {formatDate(order.approvedAt)}</span>
+                        <span>อนุมัติโดย <strong>{order.approvedBy || 'Admin'}</strong> เมื่อ {formatDate(order.approvedAt)}</span>
                       </div>
-                      <span className="text-emerald-600 font-medium">ตัดสต็อกสำเร็จ</span>
+                      <span className="text-emerald-600 font-medium">บันทึกเรียบร้อย</span>
                     </div>
                   )}
 
@@ -355,7 +363,7 @@ export default function AdminApproval({
                     <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-start space-x-2">
                       <XCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
                       <div>
-                        <div>ปฏิเสธโดย <strong>{order.rejectedBy || 'พี่น้ำ'}</strong> เมื่อ {formatDate(order.rejectedAt)}</div>
+                        <div>ปฏิเสธโดย <strong>{order.rejectedBy || 'Admin'}</strong> เมื่อ {formatDate(order.rejectedAt)}</div>
                         <div className="font-semibold mt-0.5">เหตุผล: {order.rejectReason || 'ไม่อนุมัติ'}</div>
                       </div>
                     </div>

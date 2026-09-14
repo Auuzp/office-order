@@ -9,9 +9,24 @@ export const DEPARTMENTS = [
 ];
 
 export const COMPANIES = [
-  { id: 'Illu', name: 'Illu (อิลลู)', badgeClass: 'bg-blue-100 text-blue-800 border-blue-200' },
-  { id: 'LL', name: 'LL (แอลแอล)', badgeClass: 'bg-purple-100 text-purple-800 border-purple-200' },
-  { id: 'True', name: 'True (ทรู)', badgeClass: 'bg-rose-100 text-rose-800 border-rose-200' }
+  { 
+    id: 'Illuspace (Thailand) Co., Ltd.', 
+    shortName: 'Illuspace', 
+    name: 'Illuspace (Thailand) Co., Ltd.', 
+    badgeClass: 'bg-blue-50 text-blue-700 border-blue-200 ring-blue-500' 
+  },
+  { 
+    id: 'Live Lighting Co., Ltd.', 
+    shortName: 'Live Lighting', 
+    name: 'Live Lighting Co., Ltd.', 
+    badgeClass: 'bg-purple-50 text-purple-700 border-purple-200 ring-purple-500' 
+  },
+  { 
+    id: 'True Innovation Tech Co., Ltd.', 
+    shortName: 'True Innovation', 
+    name: 'True Innovation Tech Co., Ltd.', 
+    badgeClass: 'bg-rose-50 text-rose-700 border-rose-200 ring-rose-500' 
+  }
 ];
 
 export const CATEGORIES = [
@@ -195,14 +210,14 @@ export const INITIAL_ORDERS = [
     id: 'REQ-2026-001',
     createdAt: '2026-09-14T08:30:00.000Z',
     requesterName: 'สมชาย ใจดี',
-    company: 'Illu',
+    company: 'Illuspace (Thailand) Co., Ltd.',
     department: 'ฝ่ายเทคโนโลยีสารสนเทศ (IT)',
     departmentId: 'IT',
     reason: 'พนักงานใหม่',
     priority: 'เร่งด่วน',
     reasonDetail: 'จัดชุดคอมพิวเตอร์และอุปกรณ์สำหรับโปรแกรมเมอร์เข้าใหม่ วันที่ 16 ก.ย.',
-    status: 'SHIPPING', // รออนุมัติ | อนุมัติแล้ว | กำลังจัดส่ง | ปฏิเสธ
-    approvedBy: 'พี่น้ำ (ฝ่ายพัสดุ)',
+    status: 'SHIPPING',
+    approvedBy: 'Admin (ผู้ดูแลระบบ)',
     approvedAt: '2026-09-14T09:15:00.000Z',
     items: [
       { itemId: 'SKU-003', itemName: 'เมาส์ไร้สายบลูทูธ Silent Click (Logitech)', quantity: 1, unit: 'ตัว', price: 490 },
@@ -215,7 +230,7 @@ export const INITIAL_ORDERS = [
     id: 'REQ-2026-002',
     createdAt: '2026-09-14T09:00:00.000Z',
     requesterName: 'ศิริพร บุญรักษา',
-    company: 'LL',
+    company: 'Live Lighting Co., Ltd.',
     department: 'ฝ่ายการตลาด (Marketing)',
     departmentId: 'MKT',
     reason: 'ชำรุด',
@@ -233,14 +248,14 @@ export const INITIAL_ORDERS = [
     id: 'REQ-2026-003',
     createdAt: '2026-09-14T09:20:00.000Z',
     requesterName: 'กิตติศักดิ์ พรหมดี',
-    company: 'True',
+    company: 'True Innovation Tech Co., Ltd.',
     department: 'ฝ่ายปฏิบัติการ (Operations)',
     departmentId: 'OPS',
     reason: 'อุปกรณ์หมด/ใช้งานเพิ่ม',
     priority: 'ปกติ',
     reasonDetail: 'เตรียมทำความสะอาดจุดสัมผัสและโต๊ะทำงานประจำสัปดาห์',
     status: 'APPROVED',
-    approvedBy: 'พี่น้ำ (ฝ่ายพัสดุ)',
+    approvedBy: 'Admin (ผู้ดูแลระบบ)',
     approvedAt: '2026-09-14T09:40:00.000Z',
     items: [
       { itemId: 'SKU-005', itemName: 'สเปรย์แอลกอฮอล์ทำความสะอาด 75% (500 ml)', quantity: 3, unit: 'ขวด', price: 89 },
@@ -252,14 +267,14 @@ export const INITIAL_ORDERS = [
     id: 'REQ-2026-004',
     createdAt: '2026-09-13T14:10:00.000Z',
     requesterName: 'อัญชลี รัตนโชติ',
-    company: 'Illu',
+    company: 'Illuspace (Thailand) Co., Ltd.',
     department: 'ฝ่ายทรัพยากรบุคคล (HR)',
     departmentId: 'HR',
     reason: 'สูญหาย',
     priority: 'ด่วนมาก',
     reasonDetail: 'เครื่องเย็บกระดาษห้องสัมภาษณ์หาย',
     status: 'REJECTED',
-    approvedBy: 'พี่น้ำ (ฝ่ายพัสดุ)',
+    approvedBy: 'Admin (ผู้ดูแลระบบ)',
     rejectReason: 'ตรวจสอบพบว่ามีสำรองอยู่ที่ตู้พัสดุชั้น 2 สามารถเบิกใช้งานได้ทันทีไม่ต้องสั่งซื้อใหม่',
     approvedAt: '2026-09-13T15:00:00.000Z',
     items: [
@@ -268,3 +283,26 @@ export const INITIAL_ORDERS = [
     totalCost: 110
   }
 ];
+
+export const getFullCompanyName = (company) => {
+  if (!company) return '-';
+  if (company === 'Illu' || company.includes('Illuspace')) return 'Illuspace (Thailand) Co., Ltd.';
+  if (company === 'LL' || company.includes('Live Lighting')) return 'Live Lighting Co., Ltd.';
+  if (company === 'True' || company.includes('True Innovation')) return 'True Innovation Tech Co., Ltd.';
+  return company;
+};
+
+export const getCompanyBadgeClass = (company) => {
+  if (!company) return 'bg-slate-50 text-slate-700 border-slate-200';
+  if (company === 'Illu' || company.includes('Illuspace')) {
+    return 'bg-blue-50 text-blue-700 border-blue-200';
+  }
+  if (company === 'LL' || company.includes('Live Lighting')) {
+    return 'bg-purple-50 text-purple-700 border-purple-200';
+  }
+  if (company === 'True' || company.includes('True Innovation')) {
+    return 'bg-rose-50 text-rose-700 border-rose-200';
+  }
+  return 'bg-slate-50 text-slate-700 border-slate-200';
+};
+

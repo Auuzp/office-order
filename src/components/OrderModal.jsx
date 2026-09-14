@@ -14,9 +14,9 @@ import {
 } from 'lucide-react';
 
 const COMPANIES = [
-  { id: 'Illu', name: 'Illu', color: 'border-blue-500 bg-blue-50 text-blue-700 ring-blue-500' },
-  { id: 'LL', name: 'LL', color: 'border-purple-500 bg-purple-50 text-purple-700 ring-purple-500' },
-  { id: 'True', name: 'True', color: 'border-rose-500 bg-rose-50 text-rose-700 ring-rose-500' },
+  { id: 'Illuspace (Thailand) Co., Ltd.', shortName: 'Illuspace', name: 'Illuspace (Thailand) Co., Ltd.', color: 'border-blue-500 bg-blue-50 text-blue-700 ring-blue-500' },
+  { id: 'Live Lighting Co., Ltd.', shortName: 'Live Lighting', name: 'Live Lighting Co., Ltd.', color: 'border-purple-500 bg-purple-50 text-purple-700 ring-purple-500' },
+  { id: 'True Innovation Tech Co., Ltd.', shortName: 'True Innovation Tech', name: 'True Innovation Tech Co., Ltd.', color: 'border-rose-500 bg-rose-50 text-rose-700 ring-rose-500' },
 ];
 
 const REASONS = [
@@ -35,7 +35,7 @@ export default function OrderModal({
   onSubmitOrder,
   isSubmitting 
 }) {
-  const [company, setCompany] = useState('Illu');
+  const [company, setCompany] = useState('Illuspace (Thailand) Co., Ltd.');
   const [requesterName, setRequesterName] = useState('');
   const [department, setDepartment] = useState('');
   const [reason, setReason] = useState('ชำรุด');
@@ -105,7 +105,7 @@ export default function OrderModal({
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-900">แบบฟอร์มขอสั่งซื้ออุปกรณ์สำนักงาน</h2>
-              <p className="text-xs text-slate-500">กรอกรายละเอียดคำขอเพื่อส่งให้พี่น้ำอนุมัติ</p>
+              <p className="text-xs text-slate-500">กรอกรายละเอียดคำขอเพื่อส่งให้ Admin อนุมัติ</p>
             </div>
           </div>
           <button
@@ -216,13 +216,13 @@ export default function OrderModal({
             )}
           </div>
 
-          {/* Section 2: บริษัทของ User (Illu / LL / True) */}
+          {/* Section 2: บริษัทของ User (สังกัดบริษัท) */}
           <div>
             <label className="text-sm font-semibold text-slate-800 flex items-center space-x-1.5 mb-2">
               <Building2 className="w-4 h-4 text-emerald-600" />
               <span>2. บริษัทของ User (สังกัดบริษัท) <span className="text-rose-500">*</span></span>
             </label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {COMPANIES.map((comp) => {
                 const isSelected = company === comp.id;
                 return (
@@ -230,17 +230,15 @@ export default function OrderModal({
                     type="button"
                     key={comp.id}
                     onClick={() => setCompany(comp.id)}
-                    className={`py-3 px-4 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center space-y-1 ${
+                    className={`py-3 px-3 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center space-y-1 ${
                       isSelected
                         ? `${comp.color} shadow-sm ring-2 font-bold`
                         : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-medium'
                     }`}
                   >
-                    <span className="text-base tracking-wide">{comp.name}</span>
-                    <span className="text-[11px] opacity-75">
-                      {comp.id === 'Illu' && 'บริษัท อิลลู'}
-                      {comp.id === 'LL' && 'บริษัท แอลแอล'}
-                      {comp.id === 'True' && 'บริษัท ทรู'}
+                    <span className="text-sm tracking-wide font-bold">{comp.shortName}</span>
+                    <span className="text-[11px] opacity-75 text-center leading-tight">
+                      {comp.name}
                     </span>
                   </button>
                 );
@@ -320,7 +318,7 @@ export default function OrderModal({
           {/* Notice before submit */}
           <div className="p-3 bg-amber-50 rounded-xl border border-amber-200/80 text-amber-800 text-xs flex items-center space-x-2">
             <span className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0 animate-ping"></span>
-            <span>เมื่อกดส่งคำขอ คำสั่งซื้อจะส่งไปยัง **พี่น้ำ** เพื่อตรวจสอบและอนุมัติตัดสต็อกต่อไป</span>
+            <span>เมื่อกดส่งคำขอ คำสั่งซื้อจะส่งไปยัง **ผู้ดูแลระบบ (Admin)** เพื่อตรวจสอบและอนุมัติตัดสต็อกต่อไป</span>
           </div>
 
           {/* Footer Actions */}

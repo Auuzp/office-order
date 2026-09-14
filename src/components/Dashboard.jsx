@@ -63,7 +63,7 @@ export default function Dashboard({
               สวัสดีครับ ยินดีต้อนรับสู่ระบบเบิกอุปกรณ์
             </h1>
             <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
-              ขอเบิกอุปกรณ์สำนักงานสำหรับเครือ Illu, LL และ True ตรวจสอบสถานะและติดตามงบประมาณแผนกได้อย่างโปร่งใส
+              ขอเบิกอุปกรณ์สำนักงานสำหรับเครือ Illuspace (Thailand) Co., Ltd., Live Lighting Co., Ltd. และ True Innovation Tech Co., Ltd. ตรวจสอบสถานะและติดตามงบประมาณแผนกได้อย่างโปร่งใส
             </p>
           </div>
 
@@ -111,7 +111,7 @@ export default function Dashboard({
           </div>
           <div className="text-[11px] text-amber-700/80 mt-1 flex items-center space-x-1">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
-            <span>รอพี่น้ำตรวจสอบและอนุมัติ</span>
+            <span>รอผู้ดูแลระบบ (Admin) ตรวจสอบและอนุมัติ</span>
           </div>
         </div>
 

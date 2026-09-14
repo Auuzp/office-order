@@ -58,7 +58,7 @@ app.get('/api/items', (req, res) => {
   res.json({ success: true, data: items });
 });
 
-// 2. Add new equipment (พี่น้ำแอดรายการอุปกรณ์เข้าไปในระบบ)
+// 2. Add new equipment (Admin เพิ่มรายการอุปกรณ์เข้าไปในระบบ)
 app.post('/api/items', (req, res) => {
   const { name, category, stock, unit, minStock, description, imageUrl } = req.body;
   
@@ -155,9 +155,28 @@ app.post('/api/orders', (req, res) => {
   if (!requesterName || !requesterName.trim()) {
     return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อผู้ขอซื้อ' });
   }
-  if (!['Illu', 'LL', 'True'].includes(company)) {
-    return res.status(400).json({ success: false, message: 'กรุณาเลือกบริษัทที่ถูกต้อง (Illu / LL / True)' });
+  const validCompanies = [
+    'Illuspace (Thailand) Co., Ltd.',
+    'Live Lighting Co., Ltd.',
+    'True Innovation Tech Co., Ltd.',
+    'Illu',
+    'LL',
+    'True'
+  ];
+  if (!validCompanies.includes(company)) {
+    return res.status(400).json({ success: false, message: 'กรุณาเลือกบริษัทที่ถูกต้อง (Illuspace / Live Lighting / True Innovation Tech)' });
   }
+
+  // Normalize company to official full name
+  let normalizedCompany = company;
+  if (company === 'Illu' || company?.includes('Illuspace')) {
+    normalizedCompany = 'Illuspace (Thailand) Co., Ltd.';
+  } else if (company === 'LL' || company?.includes('Live Lighting')) {
+    normalizedCompany = 'Live Lighting Co., Ltd.';
+  } else if (company === 'True' || company?.includes('True Innovation')) {
+    normalizedCompany = 'True Innovation Tech Co., Ltd.';
+  }
+
   if (!['ชำรุด', 'สูญหาย', 'ไม่เคยได้รับ', 'พนักงานใหม่'].includes(reason)) {
     return res.status(400).json({ success: false, message: 'กรุณาเลือกเหตุผลที่ขอซื้อ' });
   }
@@ -198,11 +217,11 @@ app.post('/api/orders', (req, res) => {
     id: orderId,
     createdAt: new Date().toISOString(),
     requesterName: requesterName.trim(),
-    company,
+    company: normalizedCompany,
     department: department ? department.trim() : '',
     reason,
     reasonDetail: reasonDetail ? reasonDetail.trim() : '',
-    status: 'PENDING', // รอพี่น้ำอนุมัติ
+    status: 'PENDING', // รอ Admin อนุมัติ
     approvedBy: null,
     approvedAt: null,
     items: resolvedItems
@@ -214,11 +233,11 @@ app.post('/api/orders', (req, res) => {
   res.status(201).json({ 
     success: true, 
     data: newOrder, 
-    message: `ส่งคำสั่งซื้อ ${orderId} สำเร็จแล้ว รอพี่น้ำอนุมัติ` 
+    message: `ส่งคำสั่งซื้อ ${orderId} สำเร็จแล้ว รอผู้ดูแลระบบ (Admin) อนุมัติ` 
   });
 });
 
-// 7. Approve order (อนุมัติโดยพี่น้ำ พร้อมตัดสต็อกอัตโนมัติ)
+// 7. Approve order (อนุมัติโดย Admin พร้อมตัดสต็อกอัตโนมัติ)
 app.post('/api/orders/:id/approve', (req, res) => {
   const { id } = req.params;
   const orderIndex = orders.findIndex(o => o.id === id);
@@ -257,7 +276,7 @@ app.post('/api/orders/:id/approve', (req, res) => {
 
   // Update order status
   order.status = 'APPROVED';
-  order.approvedBy = 'พี่น้ำ';
+  order.approvedBy = 'Admin';
   order.approvedAt = new Date().toISOString();
   saveData(ORDERS_FILE, orders);
 
@@ -269,7 +288,7 @@ app.post('/api/orders/:id/approve', (req, res) => {
   });
 });
 
-// 8. Reject order (ปฏิเสธโดยพี่น้ำ)
+// 8. Reject order (ปฏิเสธโดย Admin)
 app.post('/api/orders/:id/reject', (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
@@ -284,7 +303,7 @@ app.post('/api/orders/:id/reject', (req, res) => {
   }
 
   order.status = 'REJECTED';
-  order.rejectedBy = 'พี่น้ำ';
+  order.rejectedBy = 'Admin';
   order.rejectReason = reason || 'ไม่อนุมัติคำสั่งซื้อ';
   order.rejectedAt = new Date().toISOString();
   saveData(ORDERS_FILE, orders);
@@ -307,13 +326,23 @@ app.get('/api/stats', (req, res) => {
 
   // Company breakdown
   const companyCounts = {
+    'Illuspace (Thailand) Co., Ltd.': 0,
+    'Live Lighting Co., Ltd.': 0,
+    'True Innovation Tech Co., Ltd.': 0,
     Illu: 0,
     LL: 0,
     True: 0
   };
   orders.forEach(o => {
-    if (companyCounts[o.company] !== undefined) {
-      companyCounts[o.company]++;
+    if (o.company === 'Illu' || o.company?.includes('Illuspace')) {
+      companyCounts['Illuspace (Thailand) Co., Ltd.']++;
+      companyCounts.Illu++;
+    } else if (o.company === 'LL' || o.company?.includes('Live Lighting')) {
+      companyCounts['Live Lighting Co., Ltd.']++;
+      companyCounts.LL++;
+    } else if (o.company === 'True' || o.company?.includes('True Innovation')) {
+      companyCounts['True Innovation Tech Co., Ltd.']++;
+      companyCounts.True++;
     }
   });
 

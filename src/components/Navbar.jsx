@@ -100,7 +100,7 @@ export default function Navbar({
               )}
             </button>
 
-            {/* Role Switcher Pill (Employee vs Approver พี่น้ำ) */}
+            {/* Role Switcher Pill (Employee vs Admin) */}
             {currentRole === 'EMPLOYEE' ? (
               <button
                 onClick={onSwitchRole}
@@ -108,12 +108,12 @@ export default function Navbar({
               >
                 <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
                 <span className="hidden sm:inline">สลับไป</span>
-                <span className="font-semibold text-indigo-700">พี่น้ำ (ผู้อนุมัติ)</span>
+                <span className="font-semibold text-indigo-700">โหมด Admin</span>
               </button>
             ) : (
               <div className="flex items-center space-x-1.5 bg-indigo-50 border border-indigo-200 py-1 px-3 rounded-full">
                 <span className="inline-block w-2 h-2 rounded-full bg-indigo-600 animate-ping"></span>
-                <span className="text-xs font-bold text-indigo-900">โหมดพี่น้ำ (ผู้อนุมัติ)</span>
+                <span className="text-xs font-bold text-indigo-900">โหมดผู้ดูแลระบบ (Admin)</span>
                 <button
                   onClick={onSwitchRole}
                   className="p-1 hover:bg-indigo-200 rounded-full text-indigo-600 transition-colors ml-1"

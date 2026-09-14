@@ -55,7 +55,7 @@ export default function EmployeeCatalog({
             ขอเบิกอุปกรณ์สำนักงานสำหรับพนักงาน
           </h1>
           <p className="text-emerald-100 text-sm sm:text-base mb-4 leading-relaxed">
-            เลือกรายการที่ต้องการ กรอกชื่อพนักงาน สังกัดบริษัท (Illu / LL / True) และเหตุผล คำขอจะถูกส่งให้พี่น้ำอนุมัติตามขั้นตอน
+            เลือกรายการที่ต้องการ กรอกชื่อพนักงาน สังกัดบริษัท (Illuspace (Thailand) Co., Ltd. / Live Lighting Co., Ltd. / True Innovation Tech Co., Ltd.) และเหตุผล คำขอจะถูกส่งให้ Admin อนุมัติตามขั้นตอน
           </p>
 
           <div className="grid grid-cols-3 gap-3 text-center pt-3 border-t border-white/20">
@@ -69,7 +69,7 @@ export default function EmployeeCatalog({
             </div>
             <div className="bg-white/10 rounded-xl p-2.5 backdrop-blur-sm">
               <span className="text-xs text-emerald-200 block">3. รออนุมัติ</span>
-              <span className="text-xs font-semibold">พี่น้ำตรวจรับรอง</span>
+              <span className="text-xs font-semibold">Admin ตรวจรับรอง</span>
             </div>
           </div>
         </div>

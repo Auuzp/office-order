@@ -18,7 +18,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import StatusBadge from './StatusBadge';
-import { COMPANIES } from '../data/mockData';
+import { COMPANIES, getFullCompanyName, getCompanyBadgeClass } from '../data/mockData';
 
 export default function OrderTracking({ 
   orders, 
@@ -46,11 +46,16 @@ export default function OrderTracking({
         order.items.some((i) => i.itemName.toLowerCase().includes(q));
 
       const matchStatus = selectedStatus === 'ALL' || order.status === selectedStatus;
-      const matchCompany = selectedCompany === 'ALL' || order.company === selectedCompany;
+      const matchCompany = selectedCompany === 'ALL' || 
+        order.company === selectedCompany ||
+        (selectedCompany.includes('Illuspace') && (order.company === 'Illu' || order.company?.includes('Illuspace'))) ||
+        (selectedCompany.includes('Live Lighting') && (order.company === 'LL' || order.company?.includes('Live Lighting'))) ||
+        (selectedCompany.includes('True Innovation') && (order.company === 'True' || order.company?.includes('True')));
 
       return matchSearch && matchStatus && matchCompany;
     });
   }, [orders, searchQuery, selectedStatus, selectedCompany]);
+
 
   const formatDate = (isoStr) => {
     if (!isoStr) return '-';
@@ -121,17 +126,22 @@ export default function OrderTracking({
           <div className="flex items-center space-x-2">
             <span className="text-xs font-bold text-slate-500 whitespace-nowrap">บริษัท:</span>
             <div className="flex bg-slate-100 p-1 rounded-xl">
-              {['ALL', 'Illu', 'LL', 'True'].map((c) => (
+              {[
+                { id: 'ALL', label: 'ทั้งหมด' },
+                { id: 'Illuspace (Thailand) Co., Ltd.', label: 'Illuspace' },
+                { id: 'Live Lighting Co., Ltd.', label: 'Live Lighting' },
+                { id: 'True Innovation Tech Co., Ltd.', label: 'True Innovation' }
+              ].map((c) => (
                 <button
-                  key={c}
-                  onClick={() => setSelectedCompany(c)}
+                  key={c.id}
+                  onClick={() => setSelectedCompany(c.id)}
                   className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                    selectedCompany === c
+                    selectedCompany === c.id
                       ? 'bg-white text-slate-900 shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  {c === 'ALL' ? 'ทั้งหมด' : c}
+                  {c.label}
                 </button>
               ))}
             </div>
@@ -218,12 +228,8 @@ export default function OrderTracking({
 
                       {/* Company & Department */}
                       <td className="py-3.5 px-4">
-                        <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${
-                          order.company === 'Illu' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                          order.company === 'LL' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                          'bg-rose-50 text-rose-700 border-rose-200'
-                        }`}>
-                          {order.company}
+                        <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${getCompanyBadgeClass(order.company)}`}>
+                          {getFullCompanyName(order.company)}
                         </span>
                         <div className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[140px]" title={order.department}>
                           {order.department}
@@ -348,7 +354,7 @@ export default function OrderTracking({
               </div>
               <div>
                 <span className="text-slate-400 block">บริษัท / แผนก:</span>
-                <strong className="text-slate-800">{selectedOrderDetails.company} - {selectedOrderDetails.department}</strong>
+                <strong className="text-slate-800">{getFullCompanyName(selectedOrderDetails.company)} - {selectedOrderDetails.department}</strong>
               </div>
               <div>
                 <span className="text-slate-400 block">เหตุผล:</span>

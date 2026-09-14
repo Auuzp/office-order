@@ -6,6 +6,7 @@ import ProductCatalog from './components/ProductCatalog';
 import CartModal from './components/CartModal';
 import OrderTracking from './components/OrderTracking';
 import AdminApproval from './components/AdminApproval';
+import AdminInventory from './components/AdminInventory';
 import { 
   INITIAL_PRODUCTS, 
   INITIAL_ORDERS, 
@@ -50,7 +51,7 @@ export default function App() {
   const [isCartModalOpen, setIsCartModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // PIN Login Modal for Approver Mode (พี่น้ำ)
+  // PIN Login Modal for Approver Mode (Admin)
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
@@ -134,7 +135,7 @@ export default function App() {
       setIsCartModalOpen(false);
       setIsSubmitting(false);
       setActiveTab('tracking');
-      showToast(`ส่งคำขอเบิก ${newId} สำเร็จแล้ว! อยู่ระหว่างรอพี่น้ำอนุมัติ`, 'success');
+      showToast(`ส่งคำขอเบิก ${newId} สำเร็จแล้ว! อยู่ระหว่างรอ Admin อนุมัติ`, 'success');
     }, 500);
   };
 
@@ -187,7 +188,7 @@ export default function App() {
           ? {
               ...o,
               status: 'APPROVED',
-              approvedBy: 'พี่น้ำ (ฝ่ายพัสดุ)',
+              approvedBy: 'Admin (ผู้ดูแลระบบ)',
               approvedAt: new Date().toISOString()
             }
           : o
@@ -217,7 +218,7 @@ export default function App() {
           ? {
               ...o,
               status: 'REJECTED',
-              approvedBy: 'พี่น้ำ (ฝ่ายพัสดุ)',
+              approvedBy: 'Admin (ผู้ดูแลระบบ)',
               rejectReason: reason || 'ไม่อนุมัติ',
               approvedAt: new Date().toISOString()
             }
@@ -246,7 +247,7 @@ export default function App() {
       setCurrentRole('ADMIN');
       setIsPinModalOpen(false);
       setActiveTab('tracking');
-      showToast('เข้าสู่โหมดพี่น้ำ (ผู้อนุมัติ) เรียบร้อยแล้ว', 'success');
+      showToast('เข้าสู่โหมดผู้ดูแลระบบ (Admin) เรียบร้อยแล้ว', 'success');
     } else {
       setPinError('รหัส PIN ไม่ถูกต้อง (รหัสเริ่มต้น: 1234)');
     }
@@ -341,6 +342,31 @@ export default function App() {
             />
           )}
 
+          {/* View 5: Admin Inventory Management */}
+          {activeTab === 'admin-inventory' && (
+            <AdminInventory
+              items={products}
+              onAddItem={(newItem) => {
+                const created = {
+                  ...newItem,
+                  id: `SKU-${Date.now()}`
+                };
+                setProducts((prev) => [created, ...prev]);
+                showToast(`เพิ่มอุปกรณ์ "${newItem.name}" เรียบร้อยแล้ว`);
+              }}
+              onUpdateItem={(id, updateData) => {
+                setProducts((prev) =>
+                  prev.map((item) => (item.id === id ? { ...item, ...updateData } : item))
+                );
+                showToast('อัปเดตข้อมูลอุปกรณ์เรียบร้อยแล้ว');
+              }}
+              onDeleteItem={(id) => {
+                setProducts((prev) => prev.filter((item) => item.id !== id));
+                showToast('ลบรายการอุปกรณ์เรียบร้อยแล้ว');
+              }}
+            />
+          )}
+
         </main>
       </div>
 
@@ -367,10 +393,10 @@ export default function App() {
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900">
-                เข้าสู่โหมดพี่น้ำ (ผู้อนุมัติ)
+                เข้าสู่โหมดผู้ดูแลระบบ (Admin)
               </h3>
               <p className="text-xs text-slate-500 mt-1">
-                กรุณาใส่รหัส PIN เพื่อตรวจสอบและอนุมัติคำขอเบิกอุปกรณ์
+                กรุณาใส่รหัส PIN เพื่อตรวจสอบและจัดการระบบเบิกอุปกรณ์
               </p>
             </div>
 
@@ -427,7 +453,7 @@ export default function App() {
       {/* Footer */}
       <footer className="mt-12 bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-400">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>ระบบสั่งซื้อและเบิกอุปกรณ์สำนักงาน • เครือ Illu / LL / True</span>
+          <span>ระบบสั่งซื้อและเบิกอุปกรณ์สำนักงาน • Illuspace (Thailand) Co., Ltd. | Live Lighting Co., Ltd. | True Innovation Tech Co., Ltd.</span>
           <span>พัฒนาด้วย React 18, Vite และ Tailwind CSS</span>
         </div>
       </footer>

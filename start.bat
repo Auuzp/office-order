@@ -5,7 +5,7 @@ set PATH=C:\Program Files\nodejs;%PATH%
 
 echo =======================================================
 echo     ระบบสั่งซื้อและเบิกอุปกรณ์สำนักงาน (Office Order)
-echo     รองรับเครือ Illu / LL / True ^| อนุมัติโดย พี่น้ำ
+echo     รองรับเครือ Illuspace / Live Lighting / True Innovation Tech ^| อนุมัติโดย Admin
 echo =======================================================
 echo.
 echo กำลังตรวจสอบและสร้างไฟล์ build ล่าสุด...
