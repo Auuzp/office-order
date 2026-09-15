@@ -6,11 +6,7 @@ import {
   ClipboardList, 
   ShieldCheck, 
   PlusCircle, 
-  X, 
-  Coins,
-  Building2,
-  TrendingUp,
-  Sparkles
+  X 
 } from 'lucide-react';
 
 export default function Sidebar({ 
@@ -25,10 +21,6 @@ export default function Sidebar({
   departments,
   onNewRequisitionClick
 }) {
-  const dept = departments.find(d => d.id === currentDepartment) || departments[0];
-  const spentPercent = Math.min(100, Math.round((dept.spentBudget / dept.totalBudget) * 100));
-  const remainingBudget = dept.totalBudget - dept.spentBudget;
-
   const navItems = [
     { id: 'dashboard', label: 'แดชบอร์ดสรุป', icon: LayoutDashboard },
     { id: 'catalog', label: 'แคตตาล็อกอุปกรณ์', icon: Boxes },
@@ -133,31 +125,14 @@ export default function Sidebar({
           </nav>
         </div>
 
-        {/* Bottom Section: Department Budget Overview */}
+        {/* Bottom Section: System Status */}
         <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-          <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-2xs space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-slate-700 flex items-center space-x-1">
-                <Coins className="w-3.5 h-3.5 text-blue-600" />
-                <span>งบประมาณ {dept.id}</span>
-              </span>
-              <span className="text-[11px] font-bold text-slate-500">{spentPercent}% ใช้ไป</span>
+          <div className="bg-white rounded-xl p-3 border border-slate-200 shadow-2xs text-center space-y-1">
+            <div className="flex items-center justify-center space-x-1.5 text-xs font-semibold text-slate-700">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>ระบบพร้อมใช้งาน</span>
             </div>
-
-            {/* Progress Bar */}
-            <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${
-                  spentPercent > 80 ? 'bg-rose-500' : spentPercent > 60 ? 'bg-amber-500' : 'bg-blue-600'
-                }`}
-                style={{ width: `${spentPercent}%` }}
-              />
-            </div>
-
-            <div className="flex justify-between text-[11px] text-slate-500 pt-1">
-              <span>คงเหลือ:</span>
-              <strong className="text-emerald-700 font-bold">฿{remainingBudget.toLocaleString()}</strong>
-            </div>
+            <p className="text-[11px] text-slate-400">Office Requisition System</p>
           </div>
         </div>
       </aside>

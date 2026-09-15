@@ -7,8 +7,7 @@ import {
   ShieldCheck, 
   LogOut, 
   Building,
-  Bell,
-  Coins
+  Bell
 } from 'lucide-react';
 
 export default function Navbar({ 
@@ -22,9 +21,6 @@ export default function Navbar({
   departments,
   onQuickSearch
 }) {
-  const selectedDept = departments.find(d => d.id === currentDepartment) || departments[0];
-  const remainingBudget = selectedDept ? selectedDept.totalBudget - selectedDept.spentBudget : 0;
-
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-2xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -56,7 +52,7 @@ export default function Navbar({
             </div>
           </div>
 
-          {/* Middle: Department Budget Pill (Active Department) */}
+          {/* Middle: Department Selector */}
           <div className="hidden md:flex items-center space-x-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
             <div className="flex items-center space-x-1.5 text-xs text-slate-500">
               <Building className="w-3.5 h-3.5 text-blue-600" />
@@ -73,12 +69,6 @@ export default function Navbar({
                 </option>
               ))}
             </select>
-            <div className="h-4 w-[1px] bg-slate-200 mx-1" />
-            <div className="flex items-center space-x-1 text-xs">
-              <Coins className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="text-slate-500 text-[11px]">งบเหลือ:</span>
-              <strong className="text-emerald-700 font-bold">฿{remainingBudget.toLocaleString()}</strong>
-            </div>
           </div>
 
           {/* Right Actions: Cart & Role Switcher */}

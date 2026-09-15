@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   Clock, 
   Sparkles, 
-  Coins, 
+  PackageCheck, 
   CheckCircle2, 
   PlusCircle, 
   ArrowRight, 
@@ -29,10 +29,6 @@ export default function Dashboard({
   const pendingOrders = orders.filter(o => o.status === 'PENDING');
   const approvedOrders = orders.filter(o => o.status === 'APPROVED');
   
-  const activeDept = departments.find(d => d.id === currentDepartment) || departments[0];
-  const remainingBudget = activeDept.totalBudget - activeDept.spentBudget;
-  const spentPercent = Math.min(100, Math.round((activeDept.spentBudget / activeDept.totalBudget) * 100));
-
   // Find popular supplies
   const popularProducts = products.filter(p => p.isPopular).slice(0, 4);
 
@@ -63,7 +59,7 @@ export default function Dashboard({
               สวัสดีครับ ยินดีต้อนรับสู่ระบบเบิกอุปกรณ์
             </h1>
             <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
-              ขอเบิกอุปกรณ์สำนักงานสำหรับเครือ Illuspace (Thailand) Co., Ltd., Live Lighting Co., Ltd. และ True Innovation Tech Co., Ltd. ตรวจสอบสถานะและติดตามงบประมาณแผนกได้อย่างโปร่งใส
+              ขอเบิกอุปกรณ์สำนักงานสำหรับเครือ Illuspace (Thailand) Co., Ltd., Live Lighting Co., Ltd. และ True Innovation Tech Co., Ltd. ตรวจสอบและติดตามสถานะคำขอได้อย่างสะดวกรวดเร็ว
             </p>
           </div>
 
@@ -134,26 +130,22 @@ export default function Dashboard({
           </div>
         </div>
 
-        {/* Metric 3: งบประมาณคงเหลือของแผนก */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
+        {/* Metric 3: รายการอุปกรณ์พร้อมเบิก */}
+        <div 
+          onClick={onNavigateToCatalog}
+          className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs hover:border-emerald-300 transition-all cursor-pointer group"
+        >
           <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-bold text-slate-700 truncate">งบเหลือ ({activeDept.id})</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <Coins className="w-4 h-4" />
+            <span className="text-xs font-bold text-slate-700 truncate">รายการอุปกรณ์พร้อมเบิก</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <PackageCheck className="w-4 h-4" />
             </div>
           </div>
           <div className="text-2xl font-extrabold text-emerald-600">
-            ฿{remainingBudget.toLocaleString()}
+            {products.length} <span className="text-xs font-medium text-slate-400">รายการ</span>
           </div>
-          <div className="w-full h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden">
-            <div 
-              className={`h-full rounded-full ${spentPercent > 80 ? 'bg-rose-500' : 'bg-emerald-500'}`} 
-              style={{ width: `${100 - spentPercent}%` }} 
-            />
-          </div>
-          <div className="text-[10px] text-slate-400 mt-1 flex justify-between">
-            <span>ใช้ไป {spentPercent}%</span>
-            <span>จากงบ ฿{activeDept.totalBudget.toLocaleString()}</span>
+          <div className="text-[11px] text-slate-400 mt-1">
+            ครอบคลุมทุกหมวดหมู่พร้อมส่งมอบ
           </div>
         </div>
 
