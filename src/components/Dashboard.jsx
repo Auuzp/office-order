@@ -301,39 +301,6 @@ export default function Dashboard({
         </div>
       </div>
 
-      {/* 5. Section: Department Budget Overview */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-2xs space-y-4">
-        <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center space-x-2">
-          <Building2 className="w-4 h-4 text-indigo-600" />
-          <span>งบประมาณอุปกรณ์คงเหลือรายแผนก</span>
-        </h2>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {departments.map((d) => {
-            const rem = d.totalBudget - d.spentBudget;
-            const pct = Math.round((d.spentBudget / d.totalBudget) * 100);
-            return (
-              <div key={d.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-slate-800 truncate">{d.name}</span>
-                  <span className="font-semibold text-slate-500">{pct}%</span>
-                </div>
-                <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
-                  <div 
-                    className={`h-full rounded-full ${pct > 80 ? 'bg-rose-500' : 'bg-blue-600'}`} 
-                    style={{ width: `${pct}%` }} 
-                  />
-                </div>
-                <div className="flex justify-between text-[11px] text-slate-500 pt-1">
-                  <span>คงเหลือ: <strong className="text-emerald-700">฿{rem.toLocaleString()}</strong></span>
-                  <span>งบเต็ม: ฿{d.totalBudget.toLocaleString()}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
     </div>
   );
 }
