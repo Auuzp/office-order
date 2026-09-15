@@ -195,7 +195,7 @@ export default function App() {
       )
     );
 
-    showToast(`อนุมัติคำขอ ${orderId} สำเร็จ (ตัดสต็อกและบันทึกงบเรียบร้อย)`, 'success');
+    showToast(`อนุมัติคำขอ ${orderId} สำเร็จ (ตัดสต็อกอุปกรณ์เรียบร้อย)`, 'success');
   };
 
   // Mark as Shipping

@@ -11,11 +11,9 @@ import {
   AlertCircle, 
   ShoppingCart, 
   CheckCircle2, 
-  Coins,
-  Flame,
   FileText
 } from 'lucide-react';
-import { COMPANIES, DEPARTMENTS, REQUISITION_REASONS } from '../data/mockData';
+import { COMPANIES, REQUISITION_REASONS } from '../data/mockData';
 
 export default function CartModal({ 
   isOpen, 
@@ -31,9 +29,7 @@ export default function CartModal({
 }) {
   const [requesterName, setRequesterName] = useState('');
   const [company, setCompany] = useState('Illuspace (Thailand) Co., Ltd.');
-  const [selectedDeptId, setSelectedDeptId] = useState(currentDepartment || 'IT');
   const [reason, setReason] = useState('ชำรุด');
-  const [priority, setPriority] = useState('ปกติ');
   const [reasonDetail, setReasonDetail] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -45,10 +41,6 @@ export default function CartModal({
   const totalItemsCount = useMemo(() => {
     return cartItems.reduce((sum, item) => sum + item.quantity, 0);
   }, [cartItems]);
-
-  const activeDept = departments.find(d => d.id === selectedDeptId) || departments[0];
-  const remainingBudget = activeDept ? activeDept.totalBudget - activeDept.spentBudget : 0;
-  const isOverBudget = totalCost > remainingBudget;
 
   if (!isOpen) return null;
 
@@ -81,10 +73,10 @@ export default function CartModal({
     const payload = {
       requesterName: requesterName.trim(),
       company,
-      departmentId: selectedDeptId,
-      department: activeDept.name,
+      department: currentDepartment || '',
+      departmentId: '',
       reason,
-      priority,
+      priority: 'ปกติ',
       reasonDetail: reasonDetail.trim(),
       totalCost,
       items: cartItems.map(i => ({
@@ -240,102 +232,48 @@ export default function CartModal({
             )}
           </div>
 
-          {/* 2. ข้อมูลบริษัทและแผนก */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* บริษัทของ User */}
-            <div>
-              <label className="text-xs sm:text-sm font-bold text-slate-800 flex items-center space-x-1.5 mb-2">
-                <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs">2</span>
-                <span>บริษัทของ User <span className="text-rose-500">*</span></span>
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {COMPANIES.map((c) => {
-                  const isSelected = company === c.id;
-                  return (
-                    <button
-                      type="button"
-                      key={c.id}
-                      onClick={() => setCompany(c.id)}
-                      className={`py-2 px-2.5 rounded-xl border text-center text-xs font-bold transition-all flex flex-col justify-center items-center ${
-                        isSelected
-                          ? 'border-blue-600 bg-blue-50 text-blue-700 ring-2 ring-blue-500/20 shadow-2xs'
-                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      <span className="font-extrabold text-[12px]">{c.shortName}</span>
-                      <span className="text-[10px] opacity-75 leading-tight mt-0.5">{c.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* แผนก */}
-            <div>
-              <label className="text-xs sm:text-sm font-bold text-slate-800 flex items-center space-x-1.5 mb-2">
-                <Building2 className="w-4 h-4 text-blue-600" />
-                <span>แผนกที่ขอเบิก <span className="text-rose-500">*</span></span>
-              </label>
-              <select
-                value={selectedDeptId}
-                onChange={(e) => setSelectedDeptId(e.target.value)}
-                className="w-full px-3.5 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-medium"
-              >
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name} (งบเหลือ ฿{(d.totalBudget - d.spentBudget).toLocaleString()})
-                  </option>
-                ))}
-              </select>
+          {/* 2. บริษัทของ User */}
+          <div>
+            <label className="text-xs sm:text-sm font-bold text-slate-800 flex items-center space-x-1.5 mb-2">
+              <Building2 className="w-4 h-4 text-blue-600" />
+              <span>บริษัทของ User <span className="text-rose-500">*</span></span>
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {COMPANIES.map((c) => {
+                const isSelected = company === c.id;
+                return (
+                  <button
+                    type="button"
+                    key={c.id}
+                    onClick={() => setCompany(c.id)}
+                    className={`py-2.5 px-3 rounded-xl border text-center text-xs font-bold transition-all flex flex-col justify-center items-center ${
+                      isSelected
+                        ? 'border-blue-600 bg-blue-50 text-blue-700 ring-2 ring-blue-500/20 shadow-2xs'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="font-extrabold text-[13px]">{c.shortName}</span>
+                    <span className="text-[10px] opacity-75 leading-tight mt-0.5">{c.name}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* 3. ผู้ขอเบิก & ระดับความเร่งด่วน */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs sm:text-sm font-bold text-slate-800 flex items-center space-x-1.5 mb-2">
-                <User className="w-4 h-4 text-blue-600" />
-                <span>ชื่อ-นามสกุล ผู้ขอซื้อ/เบิก <span className="text-rose-500">*</span></span>
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="เช่น สมชาย สุขเกษม (รหัสพนักงาน/โต๊ะทำงาน)"
-                value={requesterName}
-                onChange={(e) => setRequesterName(e.target.value)}
-                className="w-full px-3.5 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs sm:text-sm font-bold text-slate-800 flex items-center space-x-1.5 mb-2">
-                <Flame className="w-4 h-4 text-amber-500" />
-                <span>ระดับความเร่งด่วน</span>
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {['ปกติ', 'เร่งด่วน', 'ด่วนมาก'].map((p) => {
-                  const isSelected = priority === p;
-                  return (
-                    <button
-                      type="button"
-                      key={p}
-                      onClick={() => setPriority(p)}
-                      className={`py-2 text-xs font-semibold rounded-xl border transition-all ${
-                        isSelected
-                          ? p === 'ด่วนมาก'
-                            ? 'bg-rose-50 border-rose-500 text-rose-700 ring-2 ring-rose-500/20'
-                            : p === 'เร่งด่วน'
-                            ? 'bg-amber-50 border-amber-500 text-amber-800 ring-2 ring-amber-500/20'
-                            : 'bg-blue-50 border-blue-600 text-blue-700 ring-2 ring-blue-500/20'
-                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+          {/* 3. ผู้ขอเบิก */}
+          <div>
+            <label className="text-xs sm:text-sm font-bold text-slate-800 flex items-center space-x-1.5 mb-2">
+              <User className="w-4 h-4 text-blue-600" />
+              <span>ชื่อ-นามสกุล ผู้ขอซื้อ/เบิก <span className="text-rose-500">*</span></span>
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="ระบุชื่อ-นามสกุล ผู้ขอเบิก (หรือแผนก/ฝ่าย)..."
+              value={requesterName}
+              onChange={(e) => setRequesterName(e.target.value)}
+              className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-medium"
+            />
           </div>
 
           {/* 4. เหตุผลที่ขอซื้อ */}
@@ -372,27 +310,15 @@ export default function CartModal({
             />
           </div>
 
-          {/* Budget Summary Card */}
-          <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
-            isOverBudget ? 'bg-rose-50 border-rose-200' : 'bg-blue-50/50 border-blue-100'
-          }`}>
-            <div className="space-y-1 text-xs">
-              <span className="font-semibold text-slate-700 flex items-center space-x-1">
-                <Coins className="w-3.5 h-3.5 text-blue-600" />
-                <span>สรุปการใช้งบประมาณ {activeDept.name}:</span>
-              </span>
-              <div className="text-slate-500">
-                งบประมาณคงเหลือปัจจุบัน: <strong className="text-slate-800">฿{remainingBudget.toLocaleString()}</strong>
-              </div>
-              {isOverBudget && (
-                <div className="text-rose-600 font-bold">
-                  * ยอดเบิกเกินงบประมาณคงเหลือของแผนก!
-                </div>
-              )}
+          {/* Order Summary Card (Clean, No Budget) */}
+          <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/80 flex items-center justify-between">
+            <div className="text-xs text-slate-600">
+              <span className="font-bold text-slate-800 block text-sm mb-0.5">สรุปคำขอเบิกสินค้า</span>
+              <span>รวมทั้งหมด {totalItemsCount} ชิ้น ({cartItems.length} รายการ)</span>
             </div>
 
-            <div className="text-right self-end sm:self-center">
-              <span className="text-[11px] text-slate-400 block">ยอดประเมินคำขอนี้</span>
+            <div className="text-right">
+              <span className="text-[11px] text-slate-400 block">ยอดรวมประเมิน</span>
               <span className="text-xl font-extrabold text-blue-700">
                 ฿{totalCost.toLocaleString()}
               </span>
