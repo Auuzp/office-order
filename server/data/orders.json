@@ -1,5 +1,29 @@
 [
   {
+    "id": "REQ-2026-005",
+    "createdAt": "2026-09-16T06:28:18.482Z",
+    "requesterName": "ทดสอบ ซิงค์คลาวด์",
+    "company": "Illuspace (Thailand) Co., Ltd.",
+    "department": "ฝ่ายเทคโนโลยีสารสนเทศ (IT)",
+    "departmentId": "",
+    "reason": "พนักงานใหม่",
+    "priority": "ปกติ",
+    "reasonDetail": "",
+    "totalCost": 270,
+    "status": "APPROVED",
+    "approvedBy": "Admin (ผู้ดูแลระบบ)",
+    "approvedAt": "2026-09-16T06:28:24.016Z",
+    "items": [
+      {
+        "itemId": "SKU-001",
+        "itemName": "กระดาษถ่ายเอกสาร A4 (Double A 80 แกรม)",
+        "quantity": 2,
+        "unit": "รีม",
+        "price": 135
+      }
+    ]
+  },
+  {
     "id": "REQ-2026-001",
     "createdAt": "2026-09-14T08:30:00.000Z",
     "requesterName": "สมชาย ใจดี",
