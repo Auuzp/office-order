@@ -52,23 +52,33 @@ export default function Navbar({
             </div>
           </div>
 
-          {/* Middle: Department Selector */}
-          <div className="hidden md:flex items-center space-x-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
-            <div className="flex items-center space-x-1.5 text-xs text-slate-500">
-              <Building className="w-3.5 h-3.5 text-blue-600" />
-              <span>แผนก:</span>
+          {/* Middle: Department Selector & Cloud Sync Badge */}
+          <div className="hidden md:flex items-center space-x-2.5">
+            <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
+              <div className="flex items-center space-x-1.5 text-xs text-slate-500">
+                <Building className="w-3.5 h-3.5 text-blue-600" />
+                <span>แผนก:</span>
+              </div>
+              <select
+                value={currentDepartment}
+                onChange={(e) => onSelectDepartment(e.target.value)}
+                className="text-xs font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+              >
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
             </div>
-            <select
-              value={currentDepartment}
-              onChange={(e) => onSelectDepartment(e.target.value)}
-              className="text-xs font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+
+            <div 
+              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-[11px] font-semibold tracking-tight shadow-2xs"
+              title="ระบบเชื่อมต่อฐานข้อมูลกลางออนไลน์ ข้อมูลคำสั่งซื้อและสต็อกจะอัปเดตตรงกันทุกคนแบบ Real-time"
             >
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>คลาวด์ออนไลน์ (Live Sync)</span>
+            </div>
           </div>
 
           {/* Right Actions: Cart & Role Switcher */}

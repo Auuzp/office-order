@@ -60,21 +60,24 @@ app.get('/api/items', (req, res) => {
 
 // 2. Add new equipment (Admin เพิ่มรายการอุปกรณ์เข้าไปในระบบ)
 app.post('/api/items', (req, res) => {
-  const { name, category, stock, unit, minStock, description, imageUrl } = req.body;
+  const { name, category, stock, unit, minStock, description, imageUrl, price, id } = req.body;
   
   if (!name || name.trim() === '') {
     return res.status(400).json({ success: false, message: 'กรุณากรอกชื่ออุปกรณ์' });
   }
 
   const newItem = {
-    id: `item-${Date.now()}`,
+    id: id || `SKU-${Date.now().toString().slice(-4)}`,
     name: name.trim(),
     category: category || 'อุปกรณ์ทั่วไป',
+    price: price !== undefined ? parseFloat(price) : 50,
     stock: parseInt(stock, 10) || 0,
     unit: unit || 'ชิ้น',
     minStock: parseInt(minStock, 10) || 5,
+    isPopular: !!req.body.isPopular,
+    rating: req.body.rating !== undefined ? parseFloat(req.body.rating) : 4.8,
     description: description || '',
-    imageUrl: imageUrl || 'https://images.unsplash.com/photo-1586075010923-2dd4570fb338?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3',
+    imageUrl: imageUrl || 'https://images.unsplash.com/photo-1586075010923-2dd4570fb338?w=500&auto=format&fit=crop&q=60',
     createdAt: new Date().toISOString()
   };
 
@@ -98,7 +101,8 @@ app.put('/api/items/:id', (req, res) => {
     ...req.body,
     id: current.id, // protect ID
     stock: req.body.stock !== undefined ? parseInt(req.body.stock, 10) : current.stock,
-    minStock: req.body.minStock !== undefined ? parseInt(req.body.minStock, 10) : current.minStock
+    minStock: req.body.minStock !== undefined ? parseInt(req.body.minStock, 10) : current.minStock,
+    price: req.body.price !== undefined ? parseFloat(req.body.price) : current.price
   };
 
   items[index] = updated;
@@ -155,17 +159,6 @@ app.post('/api/orders', (req, res) => {
   if (!requesterName || !requesterName.trim()) {
     return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อผู้ขอซื้อ' });
   }
-  const validCompanies = [
-    'Illuspace (Thailand) Co., Ltd.',
-    'Live Lighting Co., Ltd.',
-    'True Innovation Tech Co., Ltd.',
-    'Illu',
-    'LL',
-    'True'
-  ];
-  if (!validCompanies.includes(company)) {
-    return res.status(400).json({ success: false, message: 'กรุณาเลือกบริษัทที่ถูกต้อง (Illuspace / Live Lighting / True Innovation Tech)' });
-  }
 
   // Normalize company to official full name
   let normalizedCompany = company;
@@ -177,51 +170,54 @@ app.post('/api/orders', (req, res) => {
     normalizedCompany = 'True Innovation Tech Co., Ltd.';
   }
 
-  if (!['ชำรุด', 'สูญหาย', 'ไม่เคยได้รับ', 'พนักงานใหม่'].includes(reason)) {
-    return res.status(400).json({ success: false, message: 'กรุณาเลือกเหตุผลที่ขอซื้อ' });
-  }
   if (!requestedItems || !Array.isArray(requestedItems) || requestedItems.length === 0) {
     return res.status(400).json({ success: false, message: 'กรุณาเลือกอุปกรณ์ที่ต้องการสั่งซื้ออย่างน้อย 1 รายการ' });
   }
 
   // Validate stock sufficiency at the time of requisition
   const resolvedItems = [];
+  let calculatedCost = 0;
+
   for (const reqItem of requestedItems) {
-    const itemInStock = items.find(i => i.id === reqItem.itemId);
-    if (!itemInStock) {
-      return res.status(400).json({ success: false, message: `ไม่พบอุปกรณ์รหัส ${reqItem.itemId} ในระบบ` });
-    }
-    const qty = parseInt(reqItem.quantity, 10);
-    if (!qty || qty <= 0) {
-      return res.status(400).json({ success: false, message: `จำนวนสำหรับ ${itemInStock.name} ต้องมากกว่า 0` });
-    }
-    if (qty > itemInStock.stock) {
+    const targetId = reqItem.itemId || reqItem.id;
+    const itemInStock = items.find(i => i.id === targetId || i.name === reqItem.itemName || i.name === reqItem.name);
+    const qty = parseInt(reqItem.quantity, 10) || 1;
+    const itemName = reqItem.itemName || reqItem.name || itemInStock?.name || 'อุปกรณ์';
+    const unit = reqItem.unit || itemInStock?.unit || 'ชิ้น';
+    const price = reqItem.price !== undefined ? parseFloat(reqItem.price) : (itemInStock?.price || 0);
+
+    if (itemInStock && qty > itemInStock.stock) {
       return res.status(400).json({ 
         success: false, 
         message: `จำนวนคงเหลือของ "${itemInStock.name}" มีเพียง ${itemInStock.stock} ${itemInStock.unit} (สั่งขอ: ${qty})` 
       });
     }
 
+    calculatedCost += price * qty;
     resolvedItems.push({
-      itemId: itemInStock.id,
-      itemName: itemInStock.name,
+      itemId: targetId || itemInStock?.id || `SKU-${Date.now()}`,
+      itemName,
       quantity: qty,
-      unit: itemInStock.unit
+      unit,
+      price
     });
   }
 
   const orderNum = orders.length + 1;
-  const orderId = `ORD-${new Date().getFullYear()}-${String(orderNum).padStart(3, '0')}`;
+  const orderId = `REQ-${new Date().getFullYear()}-${String(orderNum).padStart(3, '0')}`;
 
   const newOrder = {
-    id: orderId,
-    createdAt: new Date().toISOString(),
+    id: req.body.id || orderId,
+    createdAt: req.body.createdAt || new Date().toISOString(),
     requesterName: requesterName.trim(),
-    company: normalizedCompany,
+    company: normalizedCompany || 'Illuspace (Thailand) Co., Ltd.',
     department: department ? department.trim() : '',
-    reason,
+    departmentId: req.body.departmentId || '',
+    reason: reason || 'อุปกรณ์หมด/ใช้งานเพิ่ม',
+    priority: req.body.priority || 'ปกติ',
     reasonDetail: reasonDetail ? reasonDetail.trim() : '',
-    status: 'PENDING', // รอ Admin อนุมัติ
+    totalCost: req.body.totalCost !== undefined ? parseFloat(req.body.totalCost) : calculatedCost,
+    status: req.body.status || 'PENDING', // รอ Admin อนุมัติ
     approvedBy: null,
     approvedAt: null,
     items: resolvedItems
@@ -233,7 +229,7 @@ app.post('/api/orders', (req, res) => {
   res.status(201).json({ 
     success: true, 
     data: newOrder, 
-    message: `ส่งคำสั่งซื้อ ${orderId} สำเร็จแล้ว รอผู้ดูแลระบบ (Admin) อนุมัติ` 
+    message: `ส่งคำสั่งซื้อ ${newOrder.id} สำเร็จแล้ว รอผู้ดูแลระบบ (Admin) อนุมัติ` 
   });
 });
 
@@ -250,33 +246,18 @@ app.post('/api/orders/:id/approve', (req, res) => {
     return res.status(400).json({ success: false, message: 'คำสั่งซื้อนี้ได้รับการอนุมัติไปแล้ว' });
   }
 
-  // Check if stock is still sufficient before deducting
+  // Deduct stock if item found
   for (const reqItem of order.items) {
-    const invItem = items.find(i => i.id === reqItem.itemId);
-    if (!invItem) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `ไม่พบอุปกรณ์ "${reqItem.itemName}" ในระบบแล้ว` 
-      });
+    const invItem = items.find(i => i.id === reqItem.itemId || i.name === reqItem.itemName);
+    if (invItem) {
+      invItem.stock = Math.max(0, invItem.stock - reqItem.quantity);
     }
-    if (invItem.stock < reqItem.quantity) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `ไม่สามารถอนุมัติได้: อุปกรณ์ "${invItem.name}" เหลือเพียง ${invItem.stock} ${invItem.unit} แต่มียอดสั่ง ${reqItem.quantity} ${reqItem.unit}` 
-      });
-    }
-  }
-
-  // Deduct stock
-  for (const reqItem of order.items) {
-    const invItem = items.find(i => i.id === reqItem.itemId);
-    invItem.stock -= reqItem.quantity;
   }
   saveData(ITEMS_FILE, items);
 
   // Update order status
   order.status = 'APPROVED';
-  order.approvedBy = 'Admin';
+  order.approvedBy = 'Admin (ผู้ดูแลระบบ)';
   order.approvedAt = new Date().toISOString();
   saveData(ORDERS_FILE, orders);
 
@@ -303,15 +284,34 @@ app.post('/api/orders/:id/reject', (req, res) => {
   }
 
   order.status = 'REJECTED';
-  order.rejectedBy = 'Admin';
+  order.approvedBy = 'Admin (ผู้ดูแลระบบ)';
+  order.rejectedBy = 'Admin (ผู้ดูแลระบบ)';
   order.rejectReason = reason || 'ไม่อนุมัติคำสั่งซื้อ';
-  order.rejectedAt = new Date().toISOString();
+  order.approvedAt = new Date().toISOString();
   saveData(ORDERS_FILE, orders);
 
   res.json({ 
     success: true, 
     data: order, 
     message: `ปฏิเสธคำสั่งซื้อ ${order.id} เรียบร้อยแล้ว` 
+  });
+});
+
+// 8.1 Mark as Shipping (กำลังจัดส่ง)
+app.post('/api/orders/:id/shipping', (req, res) => {
+  const { id } = req.params;
+  const order = orders.find(o => o.id === id);
+  if (!order) {
+    return res.status(404).json({ success: false, message: 'ไม่พบคำสั่งซื้อนี้' });
+  }
+
+  order.status = 'SHIPPING';
+  saveData(ORDERS_FILE, orders);
+
+  res.json({ 
+    success: true, 
+    data: order, 
+    message: `อัปเดตสถานะคำสั่งซื้อ ${order.id} เป็น "กำลังจัดส่ง" แล้ว` 
   });
 });
 

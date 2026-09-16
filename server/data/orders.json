@@ -1,100 +1,120 @@
 [
   {
-    "id": "ORD-2026-004",
-    "createdAt": "2026-09-11T07:17:07.422Z",
-    "requesterName": "กานต์ ประเสริฐ",
-    "company": "True Innovation Tech Co., Ltd.",
-    "department": "Technology",
-    "reason": "พนักงานใหม่",
-    "reasonDetail": "โต๊ะทำงานใหม่ ชั้น 4",
-    "status": "APPROVED",
-    "approvedBy": "Admin",
-    "approvedAt": "2026-09-11T07:17:13.203Z",
-    "items": [
-      {
-        "itemId": "item-001",
-        "itemName": "กระดาษถ่ายเอกสาร A4 (Double A 80 แกรม)",
-        "quantity": 3,
-        "unit": "รีม"
-      }
-    ]
-  },
-  {
-    "id": "ORD-2026-001",
-    "createdAt": "2026-09-10T10:30:00.000Z",
+    "id": "REQ-2026-001",
+    "createdAt": "2026-09-14T08:30:00.000Z",
     "requesterName": "สมชาย ใจดี",
     "company": "Illuspace (Thailand) Co., Ltd.",
-    "department": "Marketing",
+    "department": "ฝ่ายเทคโนโลยีสารสนเทศ (IT)",
+    "departmentId": "IT",
     "reason": "พนักงานใหม่",
-    "reasonDetail": "เริ่มงานแผนกการตลาด วันที่ 15 ก.ย.",
-    "status": "APPROVED",
-    "approvedBy": "Admin",
-    "approvedAt": "2026-09-10T14:15:00.000Z",
+    "priority": "เร่งด่วน",
+    "reasonDetail": "จัดชุดคอมพิวเตอร์และอุปกรณ์สำหรับโปรแกรมเมอร์เข้าใหม่ วันที่ 16 ก.ย.",
+    "status": "SHIPPING",
+    "approvedBy": "Admin (ผู้ดูแลระบบ)",
+    "approvedAt": "2026-09-14T09:15:00.000Z",
     "items": [
       {
-        "itemId": "item-008",
-        "itemName": "เมาส์ไร้สาย Silent Wireless Mouse (Logitech)",
+        "itemId": "SKU-003",
+        "itemName": "เมาส์ไร้สายบลูทูธ Silent Click (Logitech)",
         "quantity": 1,
-        "unit": "ตัว"
+        "unit": "ตัว",
+        "price": 490
       },
       {
-        "itemId": "item-009",
-        "itemName": "คีย์บอร์ดไร้สาย Wireless Keyboard (Thai/Eng)",
+        "itemId": "SKU-004",
+        "itemName": "คีย์บอร์ดไร้สายมาตรฐาน (Thai/Eng)",
         "quantity": 1,
-        "unit": "ตัว"
+        "unit": "ตัว",
+        "price": 650
       },
       {
-        "itemId": "item-002",
-        "itemName": "ปากกาลูกลื่น หมึกน้ำเงิน 0.5 มม.",
+        "itemId": "SKU-002",
+        "itemName": "ปากกาลูกลื่น Pentonic 0.5 มม. (หมึกน้ำเงิน)",
         "quantity": 2,
-        "unit": "ด้าม"
+        "unit": "ด้าม",
+        "price": 12
       }
-    ]
+    ],
+    "totalCost": 1164
   },
   {
-    "id": "ORD-2026-002",
-    "createdAt": "2026-09-11T08:45:00.000Z",
-    "requesterName": "วิภาดา รักงาน",
+    "id": "REQ-2026-002",
+    "createdAt": "2026-09-14T09:00:00.000Z",
+    "requesterName": "ศิริพร บุญรักษา",
     "company": "Live Lighting Co., Ltd.",
-    "department": "HR & Admin",
+    "department": "ฝ่ายการตลาด (Marketing)",
+    "departmentId": "MKT",
     "reason": "ชำรุด",
-    "reasonDetail": "เครื่องเย็บกระดาษตัวเดิมสปริงหัก กดไม่ลง",
+    "priority": "ปกติ",
+    "reasonDetail": "สายต่อจอห้องประชุม 201 ชำรุด ภาพกระพริบ",
     "status": "PENDING",
     "approvedBy": null,
     "approvedAt": null,
     "items": [
       {
-        "itemId": "item-005",
-        "itemName": "เครื่องเย็บกระดาษ No. 10 (MAX)",
-        "quantity": 1,
-        "unit": "ตัว"
-      },
-      {
-        "itemId": "item-004",
-        "itemName": "ลวดเย็บกระดาษ No. 10 (กล่องละ 1,000 ตัว)",
+        "itemId": "SKU-008",
+        "itemName": "สายแปลงสัญญาณ USB-C to HDMI 4K",
         "quantity": 2,
-        "unit": "กล่อง"
+        "unit": "เส้น",
+        "price": 390
       }
-    ]
+    ],
+    "totalCost": 780
   },
   {
-    "id": "ORD-2026-003",
-    "createdAt": "2026-09-11T09:15:00.000Z",
-    "requesterName": "ธนกร สุขสวัสดิ์",
+    "id": "REQ-2026-003",
+    "createdAt": "2026-09-14T09:20:00.000Z",
+    "requesterName": "กิตติศักดิ์ พรหมดี",
     "company": "True Innovation Tech Co., Ltd.",
-    "department": "Product Team",
-    "reason": "ไม่เคยได้รับ",
-    "reasonDetail": "ต้องใช้พรีเซนต์งานลูกค้าในห้องประชุม",
-    "status": "PENDING",
-    "approvedBy": null,
-    "approvedAt": null,
+    "department": "ฝ่ายปฏิบัติการ (Operations)",
+    "departmentId": "OPS",
+    "reason": "อุปกรณ์หมด/ใช้งานเพิ่ม",
+    "priority": "ปกติ",
+    "reasonDetail": "เตรียมทำความสะอาดจุดสัมผัสและโต๊ะทำงานประจำสัปดาห์",
+    "status": "APPROVED",
+    "approvedBy": "Admin (ผู้ดูแลระบบ)",
+    "approvedAt": "2026-09-14T09:40:00.000Z",
     "items": [
       {
-        "itemId": "item-010",
-        "itemName": "สายแปลง USB-C to HDMI 4K Adapter",
-        "quantity": 1,
-        "unit": "เส้น"
+        "itemId": "SKU-005",
+        "itemName": "สเปรย์แอลกอฮอล์ทำความสะอาด 75% (500 ml)",
+        "quantity": 3,
+        "unit": "ขวด",
+        "price": 89
+      },
+      {
+        "itemId": "SKU-006",
+        "itemName": "กระดาษเช็ดมืออเนกประสงค์ Scott Towel Roll",
+        "quantity": 4,
+        "unit": "ม้วน",
+        "price": 65
       }
-    ]
+    ],
+    "totalCost": 527
+  },
+  {
+    "id": "REQ-2026-004",
+    "createdAt": "2026-09-13T14:10:00.000Z",
+    "requesterName": "อัญชลี รัตนโชติ",
+    "company": "Illuspace (Thailand) Co., Ltd.",
+    "department": "ฝ่ายทรัพยากรบุคคล (HR)",
+    "departmentId": "HR",
+    "reason": "สูญหาย",
+    "priority": "ด่วนมาก",
+    "reasonDetail": "เครื่องเย็บกระดาษห้องสัมภาษณ์หาย",
+    "status": "REJECTED",
+    "approvedBy": "Admin (ผู้ดูแลระบบ)",
+    "rejectReason": "ตรวจสอบพบว่ามีสำรองอยู่ที่ตู้พัสดุชั้น 2 สามารถเบิกใช้งานได้ทันทีไม่ต้องสั่งซื้อใหม่",
+    "approvedAt": "2026-09-13T15:00:00.000Z",
+    "items": [
+      {
+        "itemId": "SKU-010",
+        "itemName": "เครื่องเย็บกระดาษ No. 10 (MAX แท้)",
+        "quantity": 1,
+        "unit": "ตัว",
+        "price": 110
+      }
+    ],
+    "totalCost": 110
   }
 ]

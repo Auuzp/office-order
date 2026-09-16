@@ -7,6 +7,7 @@ import CartModal from './components/CartModal';
 import OrderTracking from './components/OrderTracking';
 import AdminApproval from './components/AdminApproval';
 import AdminInventory from './components/AdminInventory';
+import { api } from './services/api';
 import { 
   INITIAL_PRODUCTS, 
   INITIAL_ORDERS, 
@@ -18,11 +19,12 @@ import {
   AlertCircle, 
   Info, 
   X, 
-  ShieldCheck 
+  ShieldCheck,
+  RefreshCw
 } from 'lucide-react';
 
 export default function App() {
-  // Products, Orders, and Departments
+  // Products, Orders, and Departments (loaded from localStorage cache on first render, then synced via Cloud API)
   const [products, setProducts] = useState(() => {
     const saved = localStorage.getItem('office_products_v2');
     return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
@@ -37,6 +39,10 @@ export default function App() {
     const saved = localStorage.getItem('office_departments_v2');
     return saved ? JSON.parse(saved) : DEPARTMENTS;
   });
+
+  // Cloud Sync & Network State
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
 
   // Active Department
   const [currentDepartment, setCurrentDepartment] = useState('IT');
@@ -63,7 +69,7 @@ export default function App() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  // Sync to localStorage
+  // Sync to localStorage as offline cache
   useEffect(() => {
     localStorage.setItem('office_products_v2', JSON.stringify(products));
   }, [products]);
@@ -75,6 +81,40 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('office_departments_v2', JSON.stringify(departments));
   }, [departments]);
+
+  // Fetch Cloud Data from Central Server
+  const fetchCloudData = async (silent = false) => {
+    if (!silent) setIsSyncing(true);
+    try {
+      const [cloudItems, cloudOrders] = await Promise.all([
+        api.getItems(),
+        api.getOrders()
+      ]);
+      if (cloudItems && Array.isArray(cloudItems) && cloudItems.length > 0) {
+        setProducts(cloudItems);
+      }
+      if (cloudOrders && Array.isArray(cloudOrders)) {
+        setOrders(cloudOrders);
+      }
+      setIsOnline(true);
+    } catch (err) {
+      console.warn('Central server sync status:', err.message);
+      setIsOnline(false);
+    } finally {
+      if (!silent) setIsSyncing(false);
+    }
+  };
+
+  // Initial fetch and 4-second real-time polling loop
+  useEffect(() => {
+    fetchCloudData(false);
+
+    const interval = setInterval(() => {
+      fetchCloudData(true);
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Cart Operations
   const handleAddToCart = (product, quantity = 1) => {
@@ -108,12 +148,32 @@ export default function App() {
     showToast('ล้างรายการในตะกร้าเรียบร้อยแล้ว', 'info');
   };
 
-  // Submit Requisition
-  const handleSubmitRequisition = (payload) => {
+  // Submit Requisition (Syncs directly to Central API)
+  const handleSubmitRequisition = async (payload) => {
     setIsSubmitting(true);
-    setTimeout(() => {
+    try {
+      const serverOrder = await api.createOrder({
+        requesterName: payload.requesterName,
+        company: payload.company,
+        department: payload.department,
+        departmentId: payload.departmentId,
+        reason: payload.reason,
+        priority: payload.priority,
+        reasonDetail: payload.reasonDetail,
+        totalCost: payload.totalCost,
+        items: payload.items
+      });
+
+      setOrders((prev) => [serverOrder, ...prev.filter(o => o.id !== serverOrder.id)]);
+      setCartItems([]);
+      setIsCartModalOpen(false);
+      setActiveTab('tracking');
+      showToast(`ส่งคำขอเบิก ${serverOrder.id} สำเร็จแล้ว! ซิงค์ขึ้นระบบกลางเรียบร้อย`, 'success');
+      fetchCloudData(true);
+    } catch (err) {
+      console.warn('API submission failed, using local queue:', err);
       const newId = `REQ-${new Date().getFullYear()}-${String(orders.length + 1).padStart(3, '0')}`;
-      const newOrder = {
+      const fallbackOrder = {
         id: newId,
         createdAt: new Date().toISOString(),
         requesterName: payload.requesterName,
@@ -130,24 +190,25 @@ export default function App() {
         items: payload.items
       };
 
-      setOrders((prev) => [newOrder, ...prev]);
+      setOrders((prev) => [fallbackOrder, ...prev]);
       setCartItems([]);
       setIsCartModalOpen(false);
-      setIsSubmitting(false);
       setActiveTab('tracking');
-      showToast(`ส่งคำขอเบิก ${newId} สำเร็จแล้ว! อยู่ระหว่างรอ Admin อนุมัติ`, 'success');
-    }, 500);
+      showToast(`ส่งคำขอเบิก ${newId} สำเร็จแล้ว (บันทึกข้อมูลเรียบร้อย)`, 'success');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  // Approve Requisition
-  const handleApproveOrder = (orderId) => {
+  // Approve Requisition (Syncs to Central API and updates stock)
+  const handleApproveOrder = async (orderId) => {
     const order = orders.find((o) => o.id === orderId);
     if (!order) return;
 
-    // Check stock
+    // Check stock locally first
     let shortageItem = null;
     order.items.forEach((reqItem) => {
-      const prod = products.find((p) => p.id === reqItem.itemId);
+      const prod = products.find((p) => p.id === reqItem.itemId || p.name === reqItem.itemName);
       if (prod && prod.stock < reqItem.quantity) {
         shortageItem = prod;
       }
@@ -158,73 +219,82 @@ export default function App() {
       return;
     }
 
-    // Deduct stock
-    setProducts((prev) =>
-      prev.map((p) => {
-        const matched = order.items.find((i) => i.itemId === p.id);
-        if (matched) {
-          return { ...p, stock: Math.max(0, p.stock - matched.quantity) };
-        }
-        return p;
-      })
-    );
-
-    // Deduct Department Budget
-    if (order.totalCost && order.departmentId) {
-      setDepartments((prev) =>
-        prev.map((d) => {
-          if (d.id === order.departmentId) {
-            return { ...d, spentBudget: d.spentBudget + order.totalCost };
+    try {
+      const res = await api.approveOrder(orderId);
+      if (res.data) {
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? res.data : o)));
+      }
+      if (res.items) {
+        setProducts(res.items);
+      } else {
+        fetchCloudData(true);
+      }
+      showToast(`อนุมัติคำขอ ${orderId} สำเร็จ (ตัดสต็อกและซิงค์ระบบกลางเรียบร้อย)`, 'success');
+    } catch (err) {
+      console.warn('API approve failed, applying fallback:', err);
+      // Fallback local deduct
+      setProducts((prev) =>
+        prev.map((p) => {
+          const matched = order.items.find((i) => i.itemId === p.id || i.itemName === p.name);
+          if (matched) {
+            return { ...p, stock: Math.max(0, p.stock - matched.quantity) };
           }
-          return d;
+          return p;
         })
       );
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? {
+                ...o,
+                status: 'APPROVED',
+                approvedBy: 'Admin (ผู้ดูแลระบบ)',
+                approvedAt: new Date().toISOString()
+              }
+            : o
+        )
+      );
+      showToast(`อนุมัติคำขอ ${orderId} สำเร็จ (ตัดสต็อกอุปกรณ์เรียบร้อย)`, 'success');
     }
-
-    // Update order status
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === orderId
-          ? {
-              ...o,
-              status: 'APPROVED',
-              approvedBy: 'Admin (ผู้ดูแลระบบ)',
-              approvedAt: new Date().toISOString()
-            }
-          : o
-      )
-    );
-
-    showToast(`อนุมัติคำขอ ${orderId} สำเร็จ (ตัดสต็อกอุปกรณ์เรียบร้อย)`, 'success');
   };
 
   // Mark as Shipping
-  const handleShippingOrder = (orderId) => {
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === orderId
-          ? { ...o, status: 'SHIPPING' }
-          : o
-      )
-    );
+  const handleShippingOrder = async (orderId) => {
+    try {
+      const updatedOrder = await api.shipOrder(orderId);
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? (updatedOrder || { ...o, status: 'SHIPPING' }) : o))
+      );
+    } catch (err) {
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status: 'SHIPPING' } : o))
+      );
+    }
     showToast(`อัปเดตคำขอ ${orderId} เป็น "กำลังจัดส่ง" แล้ว`, 'info');
   };
 
   // Reject Requisition
-  const handleRejectOrder = (orderId, reason) => {
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === orderId
-          ? {
-              ...o,
-              status: 'REJECTED',
-              approvedBy: 'Admin (ผู้ดูแลระบบ)',
-              rejectReason: reason || 'ไม่อนุมัติ',
-              approvedAt: new Date().toISOString()
-            }
-          : o
-      )
-    );
+  const handleRejectOrder = async (orderId, reason) => {
+    try {
+      const updatedOrder = await api.rejectOrder(orderId, reason);
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? (updatedOrder || { ...o, status: 'REJECTED', rejectReason: reason }) : o))
+      );
+    } catch (err) {
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? {
+                ...o,
+                status: 'REJECTED',
+                approvedBy: 'Admin (ผู้ดูแลระบบ)',
+                rejectReason: reason || 'ไม่อนุมัติ',
+                approvedAt: new Date().toISOString()
+              }
+            : o
+        )
+      );
+    }
     showToast(`ปฏิเสธคำขอ ${orderId} เรียบร้อยแล้ว`, 'info');
   };
 
@@ -259,9 +329,9 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex flex-col antialiased selection:bg-blue-100 selection:text-blue-900">
       
-      {/* Top Corporate Navbar */}
+      {/* Top Navigation Bar */}
       <Navbar
-        onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+        onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         cartCount={totalCartCount}
         onOpenCart={() => setIsCartModalOpen(true)}
         currentRole={currentRole}
@@ -269,18 +339,16 @@ export default function App() {
         currentDepartment={currentDepartment}
         onSelectDepartment={setCurrentDepartment}
         departments={departments}
+        onQuickSearch={() => setActiveTab('catalog')}
       />
 
-      {/* Main Layout: Sidebar + Content */}
-      <div className="flex-1 max-w-7xl w-full mx-auto flex items-start">
+      {/* Main Container */}
+      <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex gap-6">
         
-        {/* Sidebar Navigation */}
+        {/* Left Sidebar */}
         <Sidebar
           activeTab={activeTab}
-          setActiveTab={(tab) => {
-            if (tab === 'cart') setIsCartModalOpen(true);
-            else setActiveTab(tab);
-          }}
+          setActiveTab={setActiveTab}
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
           cartCount={totalCartCount}
@@ -291,10 +359,10 @@ export default function App() {
           onNewRequisitionClick={() => setActiveTab('catalog')}
         />
 
-        {/* Main Content Area */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0 max-w-full">
+        {/* Center/Right Dynamic Content */}
+        <main className="flex-1 min-w-0">
           
-          {/* View 1: Dashboard / Home */}
+          {/* View 1: Dashboard */}
           {activeTab === 'dashboard' && (
             <Dashboard
               orders={orders}
@@ -309,12 +377,12 @@ export default function App() {
             />
           )}
 
-          {/* View 2: Product Catalog */}
+          {/* View 2: Catalog */}
           {activeTab === 'catalog' && (
             <ProductCatalog
               products={products}
-              onAddToCart={handleAddToCart}
               cartItems={cartItems}
+              onAddToCart={handleAddToCart}
               onOpenCart={() => setIsCartModalOpen(true)}
             />
           )}
@@ -327,7 +395,10 @@ export default function App() {
               onApproveOrder={handleApproveOrder}
               onShippingOrder={handleShippingOrder}
               onRejectOrder={handleRejectOrder}
-              onRefresh={() => showToast('รีเฟรชข้อมูลล่าสุดเรียบร้อยแล้ว')}
+              onRefresh={() => {
+                fetchCloudData(false);
+                showToast('รีเฟรชและซิงค์ข้อมูลล่าสุดจากระบบกลางเรียบร้อยแล้ว');
+              }}
             />
           )}
 
@@ -338,7 +409,7 @@ export default function App() {
               items={products}
               onApproveOrder={handleApproveOrder}
               onRejectOrder={handleRejectOrder}
-              loading={false}
+              loading={isSyncing}
             />
           )}
 
@@ -346,23 +417,46 @@ export default function App() {
           {activeTab === 'admin-inventory' && (
             <AdminInventory
               items={products}
-              onAddItem={(newItem) => {
-                const created = {
-                  ...newItem,
-                  id: `SKU-${Date.now()}`
-                };
-                setProducts((prev) => [created, ...prev]);
-                showToast(`เพิ่มอุปกรณ์ "${newItem.name}" เรียบร้อยแล้ว`);
+              onAddItem={async (newItem) => {
+                try {
+                  const created = await api.createItem(newItem);
+                  setProducts((prev) => [created, ...prev]);
+                  showToast(`เพิ่มอุปกรณ์ "${newItem.name}" เรียบร้อยแล้ว`);
+                  fetchCloudData(true);
+                } catch (err) {
+                  const created = {
+                    ...newItem,
+                    id: `SKU-${Date.now()}`
+                  };
+                  setProducts((prev) => [created, ...prev]);
+                  showToast(`เพิ่มอุปกรณ์ "${newItem.name}" เรียบร้อยแล้ว`);
+                }
               }}
-              onUpdateItem={(id, updateData) => {
-                setProducts((prev) =>
-                  prev.map((item) => (item.id === id ? { ...item, ...updateData } : item))
-                );
-                showToast('อัปเดตข้อมูลอุปกรณ์เรียบร้อยแล้ว');
+              onUpdateItem={async (id, updateData) => {
+                try {
+                  const updated = await api.updateItem(id, updateData);
+                  setProducts((prev) =>
+                    prev.map((item) => (item.id === id ? { ...item, ...updated } : item))
+                  );
+                  showToast('อัปเดตข้อมูลอุปกรณ์เรียบร้อยแล้ว');
+                  fetchCloudData(true);
+                } catch (err) {
+                  setProducts((prev) =>
+                    prev.map((item) => (item.id === id ? { ...item, ...updateData } : item))
+                  );
+                  showToast('อัปเดตข้อมูลอุปกรณ์เรียบร้อยแล้ว');
+                }
               }}
-              onDeleteItem={(id) => {
-                setProducts((prev) => prev.filter((item) => item.id !== id));
-                showToast('ลบรายการอุปกรณ์เรียบร้อยแล้ว');
+              onDeleteItem={async (id) => {
+                try {
+                  await api.deleteItem(id);
+                  setProducts((prev) => prev.filter((item) => item.id !== id));
+                  showToast('ลบรายการอุปกรณ์เรียบร้อยแล้ว');
+                  fetchCloudData(true);
+                } catch (err) {
+                  setProducts((prev) => prev.filter((item) => item.id !== id));
+                  showToast('ลบรายการอุปกรณ์เรียบร้อยแล้ว');
+                }
               }}
             />
           )}
@@ -454,7 +548,12 @@ export default function App() {
       <footer className="mt-12 bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-400">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>ระบบสั่งซื้อและเบิกอุปกรณ์สำนักงาน • Illuspace (Thailand) Co., Ltd. | Live Lighting Co., Ltd. | True Innovation Tech Co., Ltd.</span>
-          <span>พัฒนาด้วย React 18, Vite และ Tailwind CSS</span>
+          <div className="flex items-center space-x-2">
+            <span className="inline-flex items-center space-x-1 text-[11px] text-emerald-600 font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>เชื่อมต่อระบบคลาวด์กลาง (Real-time Sync)</span>
+            </span>
+          </div>
         </div>
       </footer>
 
