@@ -1,4 +1,5 @@
-import admin from 'firebase-admin';
+import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -54,10 +55,12 @@ export function initFirebase() {
     const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_APPLICATION_CREDENTIALS;
     if (serviceAccountPath && fs.existsSync(serviceAccountPath)) {
       const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf-8'));
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
-      });
-      firestoreDb = admin.firestore();
+      if (getApps().length === 0) {
+        initializeApp({
+          credential: cert(serviceAccount)
+        });
+      }
+      firestoreDb = getFirestore();
       isFirebaseConnected = true;
       console.log('✅ Connected to Firebase Firestore via Service Account File');
       return firestoreDb;
@@ -70,14 +73,16 @@ export function initFirebase() {
 
     if (projectId && clientEmail && rawPrivateKey) {
       const privateKey = rawPrivateKey.replace(/\\n/g, '\n');
-      admin.initializeApp({
-        credential: admin.credential.cert({
-          projectId,
-          clientEmail,
-          privateKey
-        })
-      });
-      firestoreDb = admin.firestore();
+      if (getApps().length === 0) {
+        initializeApp({
+          credential: cert({
+            projectId,
+            clientEmail,
+            privateKey
+          })
+        });
+      }
+      firestoreDb = getFirestore();
       isFirebaseConnected = true;
       console.log(`✅ Connected to Firebase Firestore (Project: ${projectId})`);
       return firestoreDb;
