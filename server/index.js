@@ -4,14 +4,52 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initialItems, initialOrders } from './data/initialData.js';
+import {
+  loadEnvFile,
+  verifyPin,
+  createSession,
+  getValidSession,
+  destroySession,
+  checkRateLimit,
+  recordFailedLogin,
+  resetFailedLogins,
+  extractToken,
+  requireAdminAuth
+} from './auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Load .env configuration
+loadEnvFile(path.join(__dirname, '..', '.env'));
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+  : ['http://localhost:5173', 'http://localhost:3000', 'https://auuzp.github.io'];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+        return callback(null, true);
+      }
+      if (/^http:\/\/localhost(:\d+)?$/.test(origin) || /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) {
+        return callback(null, true);
+      }
+      if (origin.endsWith('.github.io')) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
+  })
+);
 app.use(express.json());
 
 // Persistent Data Paths
@@ -51,6 +89,100 @@ function saveData(filePath, data) {
 let items = loadData(ITEMS_FILE, initialItems);
 let orders = loadData(ORDERS_FILE, initialOrders);
 
+// Authentication Endpoints
+
+// Login with PIN
+app.post('/api/auth/login', (req, res) => {
+  const clientIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+
+  const rateCheck = checkRateLimit(clientIp);
+  if (!rateCheck.allowed) {
+    return res.status(429).json({
+      success: false,
+      message: `คุณพยายามเข้าสู่ระบบผิดพลาดหลายครั้งเกินไป กรุณารออีก ${rateCheck.remainingSec} วินาที (Too many failed attempts)`
+    });
+  }
+
+  const { pin, password } = req.body || {};
+  const providedCredential = pin !== undefined ? String(pin).trim() : (password !== undefined ? String(password).trim() : '');
+
+  if (!providedCredential) {
+    return res.status(400).json({
+      success: false,
+      message: 'กรุณากรอกรหัส PIN (PIN is required)'
+    });
+  }
+
+  const adminPinHash = process.env.ADMIN_PIN_HASH;
+  if (!adminPinHash) {
+    return res.status(500).json({
+      success: false,
+      message: 'ระบบยังไม่ได้ตั้งค่ารหัสผู้ดูแลระบบ (ADMIN_PIN_HASH is not configured in server environment)'
+    });
+  }
+
+  const isValid = verifyPin(providedCredential, adminPinHash);
+  if (!isValid) {
+    recordFailedLogin(clientIp);
+    return res.status(401).json({
+      success: false,
+      message: 'รหัส PIN ไม่ถูกต้อง (Invalid PIN)'
+    });
+  }
+
+  resetFailedLogins(clientIp);
+  const { token, session } = createSession();
+
+  const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  const maxAgeMs = session.expiresAt - session.createdAt;
+
+  res.cookie('admin_session', token, {
+    httpOnly: true,
+    secure: isSecure,
+    sameSite: isSecure ? 'None' : 'Lax',
+    maxAge: maxAgeMs,
+    path: '/api'
+  });
+
+  res.json({
+    success: true,
+    token,
+    expiresAt: session.expiresAt,
+    message: 'เข้าสู่ระบบในฐานะผู้ดูแลระบบเรียบร้อยแล้ว (Logged in as admin)'
+  });
+});
+
+// Logout
+app.post('/api/auth/logout', (req, res) => {
+  const token = extractToken(req);
+  if (token) {
+    destroySession(token);
+  }
+  const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  res.clearCookie('admin_session', {
+    httpOnly: true,
+    secure: isSecure,
+    sameSite: isSecure ? 'None' : 'Lax',
+    path: '/api'
+  });
+  res.json({ success: true, message: 'ออกจากระบบเรียบร้อยแล้ว (Logged out)' });
+});
+
+// Check Session
+app.get('/api/auth/session', (req, res) => {
+  const token = extractToken(req);
+  const session = getValidSession(token);
+  if (!session) {
+    return res.json({ success: true, authenticated: false, role: 'EMPLOYEE' });
+  }
+  res.json({
+    success: true,
+    authenticated: true,
+    role: 'ADMIN',
+    expiresAt: session.expiresAt
+  });
+});
+
 // API Endpoints
 
 // 1. Get all equipment items
@@ -59,7 +191,7 @@ app.get('/api/items', (req, res) => {
 });
 
 // 2. Add new equipment (Admin เพิ่มรายการอุปกรณ์เข้าไปในระบบ)
-app.post('/api/items', (req, res) => {
+app.post('/api/items', requireAdminAuth, (req, res) => {
   const { name, category, stock, unit, minStock, description, imageUrl, price, id } = req.body;
   
   if (!name || name.trim() === '') {
@@ -88,7 +220,7 @@ app.post('/api/items', (req, res) => {
 });
 
 // 3. Update equipment / Restock
-app.put('/api/items/:id', (req, res) => {
+app.put('/api/items/:id', requireAdminAuth, (req, res) => {
   const { id } = req.params;
   const index = items.findIndex(i => i.id === id);
   if (index === -1) {
@@ -112,7 +244,7 @@ app.put('/api/items/:id', (req, res) => {
 });
 
 // 4. Delete equipment
-app.delete('/api/items/:id', (req, res) => {
+app.delete('/api/items/:id', requireAdminAuth, (req, res) => {
   const { id } = req.params;
   const index = items.findIndex(i => i.id === id);
   if (index === -1) {
@@ -234,7 +366,7 @@ app.post('/api/orders', (req, res) => {
 });
 
 // 7. Approve order (อนุมัติโดย Admin พร้อมตัดสต็อกอัตโนมัติ)
-app.post('/api/orders/:id/approve', (req, res) => {
+app.post('/api/orders/:id/approve', requireAdminAuth, (req, res) => {
   const { id } = req.params;
   const orderIndex = orders.findIndex(o => o.id === id);
   if (orderIndex === -1) {
@@ -270,7 +402,7 @@ app.post('/api/orders/:id/approve', (req, res) => {
 });
 
 // 8. Reject order (ปฏิเสธโดย Admin)
-app.post('/api/orders/:id/reject', (req, res) => {
+app.post('/api/orders/:id/reject', requireAdminAuth, (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
   const orderIndex = orders.findIndex(o => o.id === id);
@@ -298,7 +430,7 @@ app.post('/api/orders/:id/reject', (req, res) => {
 });
 
 // 8.1 Mark as Shipping (กำลังจัดส่ง)
-app.post('/api/orders/:id/shipping', (req, res) => {
+app.post('/api/orders/:id/shipping', requireAdminAuth, (req, res) => {
   const { id } = req.params;
   const order = orders.find(o => o.id === id);
   if (!order) {
@@ -384,9 +516,16 @@ if (fs.existsSync(distPath)) {
   });
 }
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`=================================================`);
-  console.log(` Office Requisition Server is running on port ${PORT}`);
-  console.log(` http://localhost:${PORT}`);
-  console.log(`=================================================`);
-});
+const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(__filename);
+
+if (isDirectRun && process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`=================================================`);
+    console.log(` Office Requisition Server is running on port ${PORT}`);
+    console.log(` http://localhost:${PORT}`);
+    console.log(`=================================================`);
+  });
+}
+
+export default app;
+export { app };

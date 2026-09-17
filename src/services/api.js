@@ -12,15 +12,60 @@ const getApiBaseUrl = () => {
 
 export const API_BASE = getApiBaseUrl();
 
+const SESSION_STORAGE_KEY = 'office_admin_session_token';
+
+export const getSessionToken = () => {
+  try {
+    return sessionStorage.getItem(SESSION_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+};
+
+export const setSessionToken = (token) => {
+  try {
+    if (token) {
+      sessionStorage.setItem(SESSION_STORAGE_KEY, token);
+    } else {
+      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage issues in restricted environments
+  }
+};
+
+const authListeners = new Set();
+export const onUnauthorized = (listener) => {
+  authListeners.add(listener);
+  return () => authListeners.delete(listener);
+};
+
+function notifyUnauthorized() {
+  setSessionToken(null);
+  authListeners.forEach((listener) => {
+    try {
+      listener();
+    } catch (e) {
+      console.error('Error in unauthorized listener:', e);
+    }
+  });
+}
+
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
+  const token = getSessionToken();
   const defaultHeaders = {
     'Content-Type': 'application/json',
     'Accept': 'application/json'
   };
 
+  if (token) {
+    defaultHeaders['Authorization'] = `Bearer ${token}`;
+  }
+
   try {
     const res = await fetch(url, {
+      credentials: 'include',
       ...options,
       headers: {
         ...defaultHeaders,
@@ -28,9 +73,21 @@ async function request(endpoint, options = {}) {
       }
     });
 
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      data = { message: `HTTP Error ${res.status}` };
+    }
+
     if (!res.ok) {
-      throw new Error(data.message || `HTTP Error ${res.status}`);
+      if (res.status === 401) {
+        notifyUnauthorized();
+      }
+      const err = new Error(data.message || `HTTP Error ${res.status}`);
+      err.status = res.status;
+      err.data = data;
+      throw err;
     }
     return data;
   } catch (error) {
@@ -40,6 +97,42 @@ async function request(endpoint, options = {}) {
 }
 
 export const api = {
+  // Authentication
+  async login(pin) {
+    const res = await request('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ pin })
+    });
+    if (res.token) {
+      setSessionToken(res.token);
+    }
+    return res;
+  },
+
+  async logout() {
+    try {
+      const res = await request('/auth/logout', {
+        method: 'POST'
+      });
+      return res;
+    } finally {
+      setSessionToken(null);
+    }
+  },
+
+  async checkSession() {
+    try {
+      const res = await request('/auth/session');
+      if (!res.authenticated) {
+        setSessionToken(null);
+      }
+      return res;
+    } catch {
+      setSessionToken(null);
+      return { success: true, authenticated: false, role: 'EMPLOYEE' };
+    }
+  },
+
   // Items / Inventory
   async getItems() {
     const res = await request('/items');
