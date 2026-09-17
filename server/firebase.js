@@ -568,8 +568,8 @@ export const dbService = {
       );
     }
 
-    // Sort by employeeCode or name
-    employeesList.sort((a, b) => (a.employeeCode || a.id || '').localeCompare(b.employeeCode || b.id || ''));
+    // Sort by employeeCode or name safely
+    employeesList.sort((a, b) => String(a.employeeCode || a.id || '').localeCompare(String(b.employeeCode || b.id || '')));
     return employeesList;
   },
 
