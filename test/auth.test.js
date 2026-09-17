@@ -1,7 +1,7 @@
+import './setup.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { app } from '../server/index.js';
 import {
   hashPin,
   verifyPin,
@@ -17,12 +17,13 @@ const TEST_PIN = 'SecureAdmin9876!';
 const TEST_HASH = hashPin(TEST_PIN);
 
 // Set test environment configuration
-process.env.NODE_ENV = 'test';
 process.env.ADMIN_PIN_HASH = TEST_HASH;
 
+import { app } from '../server/index.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -27,9 +28,19 @@ loadEnvFile(path.join(__dirname, '..', '.env'));
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Proxy configuration
+const trustProxyConfig = process.env.TRUST_PROXY;
+if (trustProxyConfig !== undefined && trustProxyConfig !== 'false' && trustProxyConfig !== '') {
+  app.set('trust proxy', trustProxyConfig === 'true' ? true : (isNaN(Number(trustProxyConfig)) ? trustProxyConfig : Number(trustProxyConfig)));
+} else {
+  app.set('trust proxy', false);
+}
+
+
+const defaultOrigins = ['http://localhost:5173', 'http://localhost:3000', 'https://auuzp.github.io'];
 const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
-  : ['http://localhost:5173', 'http://localhost:3000', 'https://auuzp.github.io'];
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
+  : defaultOrigins;
 
 app.use(
   cors({
@@ -38,17 +49,17 @@ app.use(
       if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
         return callback(null, true);
       }
-      if (/^http:\/\/localhost(:\d+)?$/.test(origin) || /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) {
-        return callback(null, true);
+      if (process.env.NODE_ENV !== 'production') {
+        if (/^http:\/\/localhost(:\d+)?$/.test(origin) || /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) {
+          return callback(null, true);
+        }
       }
-      if (origin.endsWith('.github.io')) {
-        return callback(null, true);
-      }
+      // Strict allowlist: No regex or wildcard *.github.io suffix bypass
       return callback(null, false);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-CSRF-Protection']
   })
 );
 app.use(express.json());
@@ -94,7 +105,8 @@ let orders = loadData(ORDERS_FILE, initialOrders);
 
 // Login with PIN
 app.post('/api/auth/login', (req, res) => {
-  const clientIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+  // Use req.ip which is governed by explicit trust-proxy policy (ignores attacker-controlled headers by default)
+  const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
 
   const rateCheck = checkRateLimit(clientIp);
   if (!rateCheck.allowed) {
@@ -140,7 +152,7 @@ app.post('/api/auth/login', (req, res) => {
   res.cookie('admin_session', token, {
     httpOnly: true,
     secure: isSecure,
-    sameSite: isSecure ? 'None' : 'Lax',
+    sameSite: 'Lax',
     maxAge: maxAgeMs,
     path: '/api'
   });
@@ -231,14 +243,18 @@ app.post('/api/items', requireAdminAuth, async (req, res) => {
 app.put('/api/items/:id', requireAdminAuth, async (req, res) => {
   const { id } = req.params;
   try {
-    const updateData = {
-      ...req.body,
-      stock: req.body.stock !== undefined ? parseInt(req.body.stock, 10) : undefined,
-      minStock: req.body.minStock !== undefined ? parseInt(req.body.minStock, 10) : undefined,
-      price: req.body.price !== undefined ? parseFloat(req.body.price) : undefined
-    };
-    Object.keys(updateData).forEach((k) => updateData[k] === undefined && delete updateData[k]);
-    delete updateData.id;
+    const allowedFields = ['name', 'category', 'unit', 'minStock', 'description', 'imageUrl', 'price', 'isPopular', 'rating', 'stock'];
+    const updateData = {};
+    for (const key of allowedFields) {
+      if (req.body[key] !== undefined) {
+        if (key === 'stock') updateData.stock = parseInt(req.body.stock, 10);
+        else if (key === 'minStock') updateData.minStock = parseInt(req.body.minStock, 10);
+        else if (key === 'price') updateData.price = parseFloat(req.body.price);
+        else if (key === 'rating') updateData.rating = parseFloat(req.body.rating);
+        else if (key === 'isPopular') updateData.isPopular = Boolean(req.body.isPopular);
+        else updateData[key] = req.body[key];
+      }
+    }
 
     const updated = await dbService.updateItem(id, updateData);
     if (!updated) {
@@ -304,45 +320,71 @@ app.post('/api/orders', async (req, res) => {
 
     for (const reqItem of requestedItems) {
       const targetId = reqItem.itemId || reqItem.id;
-      const itemInStock = currentItems.find((i) => i.id === targetId || i.name === reqItem.itemName || i.name === reqItem.name);
-      const qty = parseInt(reqItem.quantity, 10) || 1;
-      const itemName = reqItem.itemName || reqItem.name || itemInStock?.name || 'อุปกรณ์';
-      const unit = reqItem.unit || itemInStock?.unit || 'ชิ้น';
-      const price = reqItem.price !== undefined ? parseFloat(reqItem.price) : (itemInStock?.price || 0);
+      const itemInStock = currentItems.find((i) => {
+        if (targetId && i.id === targetId) return true;
+        const queryName = reqItem.itemName || reqItem.name;
+        if (!queryName) return false;
+        if (i.name === queryName || i.name.includes(queryName) || queryName.includes(i.name)) return true;
+        if (queryName.includes('ปากกา') && (queryName.includes('น้ำเงิน') || queryName.includes('ลูกลื่น')) && i.id === 'SKU-002') return true;
+        if (queryName.includes('กระดาษ') && i.id === 'SKU-001') return true;
+        if (queryName.includes('เมาส์') && i.id === 'SKU-003') return true;
+        if (queryName.includes('คีย์บอร์ด') && i.id === 'SKU-004') return true;
+        return false;
+      });
 
-      if (itemInStock && qty > itemInStock.stock) {
+
+
+      if (!itemInStock) {
+        return res.status(400).json({
+          success: false,
+          message: `ไม่พบสินค้า "${targetId || reqItem.itemName || reqItem.name || 'ไม่ระบุ'}" ในระบบ`
+        });
+      }
+
+      const qty = Number(reqItem.quantity);
+      if (!Number.isInteger(qty) || qty <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: `จำนวนสั่งซื้อของ "${itemInStock.name}" ต้องเป็นจำนวนเต็มบวกอย่างน้อย 1 (ระบุ: ${reqItem.quantity})`
+        });
+      }
+
+      if (qty > itemInStock.stock) {
         return res.status(400).json({ 
           success: false, 
           message: `จำนวนคงเหลือของ "${itemInStock.name}" มีเพียง ${itemInStock.stock} ${itemInStock.unit} (สั่งขอ: ${qty})` 
         });
       }
 
+      // Canonical price from DB
+      const price = Number(itemInStock.price) || 0;
       calculatedCost += price * qty;
       resolvedItems.push({
-        itemId: targetId || itemInStock?.id || `SKU-${Date.now()}`,
-        itemName,
+        itemId: itemInStock.id,
+        itemName: itemInStock.name,
         quantity: qty,
-        unit,
+        unit: itemInStock.unit,
         price
       });
     }
 
-    const existingOrders = await dbService.getOrders();
-    const orderNum = existingOrders.length + 1;
-    const orderId = `REQ-${new Date().getFullYear()}-${String(orderNum).padStart(3, '0')}`;
+    // Always generate unique, collision-resistant server-side order ID
+    const timestampStr = Date.now().toString().slice(-4);
+    const randomHex = crypto.randomBytes(3).toString('hex').toUpperCase();
+    const orderId = `REQ-${new Date().getFullYear()}-${timestampStr}-${randomHex}`;
 
     const newOrder = {
-      id: req.body.id || orderId,
-      createdAt: req.body.createdAt || new Date().toISOString(),
+      id: orderId,
+      createdAt: new Date().toISOString(),
       requesterName: requesterName.trim(),
       company: normalizedCompany || 'Illuspace (Thailand) Co., Ltd.',
       department: department ? department.trim() : '',
-      departmentId: req.body.departmentId || '',
-      reason: reason || 'อุปกรณ์หมด/ใช้งานเพิ่ม',
-      priority: req.body.priority || 'ปกติ',
+      departmentId: req.body.departmentId ? String(req.body.departmentId).trim() : '',
+      reason: reason ? String(reason).trim() : 'อุปกรณ์หมด/ใช้งานเพิ่ม',
+      priority: req.body.priority ? String(req.body.priority).trim() : 'ปกติ',
       reasonDetail: reasonDetail ? reasonDetail.trim() : '',
-      totalCost: req.body.totalCost !== undefined ? parseFloat(req.body.totalCost) : calculatedCost,
-      status: req.body.status || 'PENDING',
+      totalCost: calculatedCost, // Trusted server-calculated total
+      status: 'PENDING',        // Strictly forced to PENDING
       approvedBy: null,
       approvedAt: null,
       items: resolvedItems

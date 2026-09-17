@@ -90,7 +90,7 @@ export default function App() {
         api.getItems(),
         api.getOrders()
       ]);
-      if (cloudItems && Array.isArray(cloudItems) && cloudItems.length > 0) {
+      if (cloudItems && Array.isArray(cloudItems)) {
         setProducts(cloudItems);
       }
       if (cloudOrders && Array.isArray(cloudOrders)) {
@@ -189,34 +189,13 @@ export default function App() {
       showToast(`ส่งคำขอเบิก ${serverOrder.id} สำเร็จแล้ว! ซิงค์ขึ้นระบบกลางเรียบร้อย`, 'success');
       fetchCloudData(true);
     } catch (err) {
-      console.warn('API submission failed, using local queue:', err);
-      const newId = `REQ-${new Date().getFullYear()}-${String(orders.length + 1).padStart(3, '0')}`;
-      const fallbackOrder = {
-        id: newId,
-        createdAt: new Date().toISOString(),
-        requesterName: payload.requesterName,
-        company: payload.company,
-        department: payload.department,
-        departmentId: payload.departmentId,
-        reason: payload.reason,
-        priority: payload.priority,
-        reasonDetail: payload.reasonDetail,
-        totalCost: payload.totalCost,
-        status: 'PENDING',
-        approvedBy: null,
-        approvedAt: null,
-        items: payload.items
-      };
-
-      setOrders((prev) => [fallbackOrder, ...prev]);
-      setCartItems([]);
-      setIsCartModalOpen(false);
-      setActiveTab('tracking');
-      showToast(`ส่งคำขอเบิก ${newId} สำเร็จแล้ว (บันทึกข้อมูลเรียบร้อย)`, 'success');
+      console.error('API submission failed:', err);
+      showToast(err.message || 'ไม่สามารถส่งคำขอเบิกได้ กรุณาตรวจสอบข้อมูลและลองใหม่อีกครั้ง', 'error');
     } finally {
       setIsSubmitting(false);
     }
   };
+
 
   // Approve Requisition (Syncs to Central API and updates stock)
   const handleApproveOrder = async (orderId) => {

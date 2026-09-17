@@ -37,6 +37,7 @@ function saveLocalData(filePath, data) {
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
   } catch (err) {
     console.error(`Error saving data to ${filePath}:`, err.message);
+    throw new Error(`Failed to save local data: ${err.message}`);
   }
 }
 
@@ -49,6 +50,24 @@ let isFirebaseConnected = false;
 
 export function initFirebase() {
   if (firestoreDb) return firestoreDb;
+
+  const isProduction = process.env.NODE_ENV === 'production';
+  const isTest = process.env.NODE_ENV === 'test';
+  const storageMode = process.env.STORAGE_MODE; // 'firestore' | 'local'
+
+  // If in test mode and no Firestore emulator host is configured, do not connect to live Firestore
+  if (isTest && !process.env.FIRESTORE_EMULATOR_HOST) {
+    firestoreDb = null;
+    isFirebaseConnected = false;
+    return null;
+  }
+
+  // If explicitly configured for local storage and not production, skip Firebase
+  if (storageMode === 'local' && !isProduction) {
+    firestoreDb = null;
+    isFirebaseConnected = false;
+    return null;
+  }
 
   try {
     // 1. Check for service account file path
@@ -88,9 +107,17 @@ export function initFirebase() {
       return firestoreDb;
     }
 
+    // If in production or explicitly requesting Firestore, FAIL CLOSED immediately
+    if (isProduction || storageMode === 'firestore') {
+      throw new Error('Production / Firestore storage mode requires valid Firebase credentials. Refusing to run in unauthenticated fallback mode.');
+    }
+
     console.log('ℹ️ Firebase credentials not configured. Using local persistent JSON storage.');
     return null;
   } catch (err) {
+    if (isProduction || storageMode === 'firestore') {
+      throw err;
+    }
     console.warn('⚠️ Failed to initialize Firebase:', err.message);
     console.log('ℹ️ Falling back to local persistent JSON storage.');
     firestoreDb = null;
@@ -110,6 +137,7 @@ export function getDb() {
   return firestoreDb;
 }
 
+
 // Data Access Layer (DAL)
 
 export const dbService = {
@@ -118,16 +146,7 @@ export const dbService = {
     const db = getDb();
     if (db) {
       const snapshot = await db.collection('items').get();
-      if (snapshot.empty) {
-        // Auto-seed initial items if collection is empty
-        const seeded = [...localItems];
-        const batch = db.batch();
-        for (const item of seeded) {
-          batch.set(db.collection('items').doc(item.id), item);
-        }
-        await batch.commit();
-        return seeded;
-      }
+      // Authoritative read: never auto-seed on empty
       return snapshot.docs.map((doc) => doc.data());
     }
     localItems = loadLocalData(ITEMS_FILE, initialItems);
@@ -160,17 +179,18 @@ export const dbService = {
       const ref = db.collection('items').doc(id);
       const doc = await ref.get();
       if (!doc.exists) return null;
-      const merged = { ...doc.data(), ...updateData, id };
-      await ref.set(merged, { merge: true });
-      return merged;
+      // Only update provided fields. Does NOT overwrite stock unless stock is explicitly passed in updateData
+      await ref.update(updateData);
+      const updated = await ref.get();
+      return updated.data();
     }
 
     const index = localItems.findIndex((i) => i.id === id);
     if (index === -1) return null;
-    const merged = { ...localItems[index], ...updateData, id };
-    localItems[index] = merged;
+    // Update only specified keys
+    Object.assign(localItems[index], updateData);
     saveLocalData(ITEMS_FILE, localItems);
-    return merged;
+    return localItems[index];
   },
 
   async deleteItem(id) {
@@ -198,17 +218,8 @@ export const dbService = {
 
     if (db) {
       const snapshot = await db.collection('orders').get();
-      if (snapshot.empty && localOrders.length > 0) {
-        // Auto-seed initial orders if collection is empty
-        const batch = db.batch();
-        for (const order of localOrders) {
-          batch.set(db.collection('orders').doc(order.id), order);
-        }
-        await batch.commit();
-        ordersList = [...localOrders];
-      } else {
-        ordersList = snapshot.docs.map((doc) => doc.data());
-      }
+      // Authoritative read: never auto-seed on empty
+      ordersList = snapshot.docs.map((doc) => doc.data());
     } else {
       localOrders = loadLocalData(ORDERS_FILE, initialOrders);
       ordersList = [...localOrders];
@@ -247,8 +258,12 @@ export const dbService = {
   async createOrder(order) {
     const db = getDb();
     if (db) {
-      await db.collection('orders').doc(order.id).set(order);
+      // Use .create() to fail atomically if the document ID already exists, preventing overwrite
+      await db.collection('orders').doc(order.id).create(order);
       return order;
+    }
+    if (localOrders.some((o) => o.id === order.id)) {
+      throw new Error(`คำสั่งซื้อรหัส ${order.id} มีอยู่ในระบบแล้ว`);
     }
     localOrders.unshift(order);
     saveLocalData(ORDERS_FILE, localOrders);
@@ -269,41 +284,43 @@ export const dbService = {
         }
 
         const orderData = orderDoc.data();
-        if (orderData.status === 'APPROVED') {
-          throw new Error('คำสั่งซื้อนี้ได้รับการอนุมัติไปแล้ว');
+        if (orderData.status !== 'PENDING') {
+          throw new Error(`คำสั่งซื้อนี้มีสถานะเป็น "${orderData.status}" แล้ว ไม่อนุญาตให้อนุมัติซ้ำ (อนุญาตเฉพาะสถานะ PENDING)`);
         }
 
-        // Fetch all items involved
-        const itemRefs = [];
-        const itemDocs = [];
-        for (const reqItem of orderData.items) {
-          const itemRef = db.collection('items').doc(reqItem.itemId);
-          itemRefs.push({ ref: itemRef, reqQty: reqItem.quantity, itemName: reqItem.itemName });
-          itemDocs.push(await transaction.get(itemRef));
-        }
-
-        // Validate stock sufficiency for all items
-        for (let i = 0; i < itemRefs.length; i++) {
-          const doc = itemDocs[i];
-          const reqQty = itemRefs[i].reqQty;
-          if (doc.exists) {
-            const currentStock = doc.data().stock || 0;
-            if (currentStock < reqQty) {
-              throw new Error(`สต็อกของ "${doc.data().name}" มีไม่เพียงพอ (คงเหลือ ${currentStock}, ต้องการ ${reqQty})`);
-            }
+        // Aggregate duplicate item lines by itemId
+        const qtyMap = new Map();
+        for (const reqItem of orderData.items || []) {
+          const itemId = reqItem.itemId || reqItem.id;
+          if (!itemId) throw new Error('รายการสินค้าในคำสั่งซื้อไม่มีรหัสสินค้า');
+          const qty = Number(reqItem.quantity);
+          if (!Number.isInteger(qty) || qty <= 0) {
+            throw new Error(`จำนวนสินค้าไม่ถูกต้องสำหรับรหัส ${itemId}`);
           }
+          qtyMap.set(itemId, (qtyMap.get(itemId) || 0) + qty);
         }
 
-        // Deduct stock
-        for (let i = 0; i < itemRefs.length; i++) {
-          const doc = itemDocs[i];
-          const reqQty = itemRefs[i].reqQty;
-          if (doc.exists) {
-            const currentStock = doc.data().stock || 0;
-            transaction.update(itemRefs[i].ref, {
-              stock: Math.max(0, currentStock - reqQty)
-            });
+        // Fetch and validate stock sufficiency for all items inside transaction
+        const itemSnapshots = new Map();
+        for (const [itemId, neededQty] of qtyMap.entries()) {
+          const itemRef = db.collection('items').doc(itemId);
+          const itemDoc = await transaction.get(itemRef);
+          if (!itemDoc.exists) {
+            throw new Error(`ไม่พบสินค้า "${itemId}" ในคลังสินค้า ไม่สามารถอนุมัติได้`);
           }
+          const itemData = itemDoc.data();
+          const currentStock = Number(itemData.stock) || 0;
+          if (currentStock < neededQty) {
+            throw new Error(`สต็อกของ "${itemData.name || itemId}" มีไม่เพียงพอ (คงเหลือ ${currentStock}, ต้องการ ${neededQty})`);
+          }
+          itemSnapshots.set(itemId, { ref: itemRef, currentStock, neededQty });
+        }
+
+        // Deduct stock once per unique item
+        for (const [, info] of itemSnapshots.entries()) {
+          transaction.update(info.ref, {
+            stock: info.currentStock - info.neededQty
+          });
         }
 
         const approvedAt = new Date().toISOString();
@@ -331,24 +348,37 @@ export const dbService = {
     }
 
     const order = localOrders[orderIndex];
-    if (order.status === 'APPROVED') {
-      throw new Error('คำสั่งซื้อนี้ได้รับการอนุมัติไปแล้ว');
+    if (order.status !== 'PENDING') {
+      throw new Error(`คำสั่งซื้อนี้มีสถานะเป็น "${order.status}" แล้ว ไม่อนุญาตให้อนุมัติซ้ำ (อนุญาตเฉพาะสถานะ PENDING)`);
+    }
+
+    // Aggregate duplicate item lines by itemId
+    const qtyMap = new Map();
+    for (const reqItem of order.items || []) {
+      const itemId = reqItem.itemId || reqItem.id;
+      if (!itemId) throw new Error('รายการสินค้าในคำสั่งซื้อไม่มีรหัสสินค้า');
+      const qty = Number(reqItem.quantity);
+      if (!Number.isInteger(qty) || qty <= 0) {
+        throw new Error(`จำนวนสินค้าไม่ถูกต้องสำหรับรหัส ${itemId}`);
+      }
+      qtyMap.set(itemId, (qtyMap.get(itemId) || 0) + qty);
     }
 
     // Stock check
-    for (const reqItem of order.items) {
-      const invItem = localItems.find((i) => i.id === reqItem.itemId || i.name === reqItem.itemName);
-      if (invItem && invItem.stock < reqItem.quantity) {
-        throw new Error(`สต็อกของ "${invItem.name}" มีไม่เพียงพอ (คงเหลือ ${invItem.stock}, ต้องการ ${reqItem.quantity})`);
+    for (const [itemId, neededQty] of qtyMap.entries()) {
+      const invItem = localItems.find((i) => i.id === itemId);
+      if (!invItem) {
+        throw new Error(`ไม่พบสินค้า "${itemId}" ในคลังสินค้า ไม่สามารถอนุมัติได้`);
+      }
+      if (invItem.stock < neededQty) {
+        throw new Error(`สต็อกของ "${invItem.name}" มีไม่เพียงพอ (คงเหลือ ${invItem.stock}, ต้องการ ${neededQty})`);
       }
     }
 
-    // Deduct stock
-    for (const reqItem of order.items) {
-      const invItem = localItems.find((i) => i.id === reqItem.itemId || i.name === reqItem.itemName);
-      if (invItem) {
-        invItem.stock = Math.max(0, invItem.stock - reqItem.quantity);
-      }
+    // Deduct stock once per unique product
+    for (const [itemId, neededQty] of qtyMap.entries()) {
+      const invItem = localItems.find((i) => i.id === itemId);
+      invItem.stock -= neededQty;
     }
     saveLocalData(ITEMS_FILE, localItems);
 
@@ -366,30 +396,38 @@ export const dbService = {
 
     if (db) {
       const orderRef = db.collection('orders').doc(orderId);
-      const doc = await orderRef.get();
-      if (!doc.exists) throw new Error('ไม่พบคำสั่งซื้อนี้');
-      const order = doc.data();
-      if (order.status === 'APPROVED') {
-        throw new Error('คำสั่งซื้อนี้ได้รับการอนุมัติแล้ว ไม่สามารถปฏิเสธย้อนหลังได้');
-      }
+      return await db.runTransaction(async (transaction) => {
+        const doc = await transaction.get(orderRef);
+        if (!doc.exists) throw new Error('ไม่พบคำสั่งซื้อนี้');
+        const order = doc.data();
+        if (order.status !== 'PENDING') {
+          throw new Error(`คำสั่งซื้อนี้มีสถานะเป็น "${order.status}" แล้ว ไม่สามารถปฏิเสธได้ (อนุญาตเฉพาะสถานะ PENDING)`);
+        }
 
-      const updated = {
-        ...order,
-        status: 'REJECTED',
-        approvedBy: adminName,
-        rejectedBy: adminName,
-        rejectReason: reason || 'ไม่อนุมัติคำสั่งซื้อ',
-        approvedAt
-      };
-      await orderRef.set(updated, { merge: true });
-      return updated;
+        const updated = {
+          ...order,
+          status: 'REJECTED',
+          approvedBy: adminName,
+          rejectedBy: adminName,
+          rejectReason: reason || 'ไม่อนุมัติคำสั่งซื้อ',
+          approvedAt
+        };
+        transaction.update(orderRef, {
+          status: 'REJECTED',
+          approvedBy: adminName,
+          rejectedBy: adminName,
+          rejectReason: reason || 'ไม่อนุมัติคำสั่งซื้อ',
+          approvedAt
+        });
+        return updated;
+      });
     }
 
     const orderIndex = localOrders.findIndex((o) => o.id === orderId);
     if (orderIndex === -1) throw new Error('ไม่พบคำสั่งซื้อนี้');
     const order = localOrders[orderIndex];
-    if (order.status === 'APPROVED') {
-      throw new Error('คำสั่งซื้อนี้ได้รับการอนุมัติแล้ว ไม่สามารถปฏิเสธย้อนหลังได้');
+    if (order.status !== 'PENDING') {
+      throw new Error(`คำสั่งซื้อนี้มีสถานะเป็น "${order.status}" แล้ว ไม่สามารถปฏิเสธได้ (อนุญาตเฉพาะสถานะ PENDING)`);
     }
 
     order.status = 'REJECTED';
@@ -405,16 +443,23 @@ export const dbService = {
     const db = getDb();
     if (db) {
       const orderRef = db.collection('orders').doc(orderId);
-      const doc = await orderRef.get();
-      if (!doc.exists) throw new Error('ไม่พบคำสั่งซื้อนี้');
-      const order = doc.data();
-      const updated = { ...order, status: 'SHIPPING' };
-      await orderRef.update({ status: 'SHIPPING' });
-      return updated;
+      return await db.runTransaction(async (transaction) => {
+        const doc = await transaction.get(orderRef);
+        if (!doc.exists) throw new Error('ไม่พบคำสั่งซื้อนี้');
+        const order = doc.data();
+        if (order.status !== 'APPROVED') {
+          throw new Error(`คำสั่งซื้อต้องอยู่ในสถานะ APPROVED ก่อนจัดส่ง (สถานะปัจจุบัน: "${order.status}")`);
+        }
+        transaction.update(orderRef, { status: 'SHIPPING' });
+        return { ...order, status: 'SHIPPING' };
+      });
     }
 
     const order = localOrders.find((o) => o.id === orderId);
     if (!order) throw new Error('ไม่พบคำสั่งซื้อนี้');
+    if (order.status !== 'APPROVED') {
+      throw new Error(`คำสั่งซื้อต้องอยู่ในสถานะ APPROVED ก่อนจัดส่ง (สถานะปัจจุบัน: "${order.status}")`);
+    }
     order.status = 'SHIPPING';
     saveLocalData(ORDERS_FILE, localOrders);
     return order;

@@ -165,27 +165,31 @@ export function resetFailedLogins(ip) {
   loginAttempts.delete(ip);
 }
 
-// Helper to extract session token from Authorization header or Cookie
-export function extractToken(req) {
+// Helper to extract session token and authentication method from Authorization header or Cookie
+export function extractAuth(req) {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    return authHeader.slice(7).trim();
+    return { token: authHeader.slice(7).trim(), method: 'bearer' };
   }
 
   const cookieHeader = req.headers.cookie;
   if (cookieHeader) {
     const match = cookieHeader.match(/(?:^|;\s*)admin_session=([^;]+)/);
     if (match) {
-      return decodeURIComponent(match[1]);
+      return { token: decodeURIComponent(match[1]), method: 'cookie' };
     }
   }
 
-  return null;
+  return { token: null, method: null };
+}
+
+export function extractToken(req) {
+  return extractAuth(req).token;
 }
 
 // Middleware: Require Admin Authentication
 export function requireAdminAuth(req, res, next) {
-  const token = extractToken(req);
+  const { token, method } = extractAuth(req);
   if (!token) {
     return res.status(401).json({
       success: false,
@@ -201,7 +205,27 @@ export function requireAdminAuth(req, res, next) {
     });
   }
 
+  // CSRF Protection for cookie-authenticated mutating requests
+  const mutatingMethods = ['POST', 'PUT', 'DELETE', 'PATCH'];
+  if (method === 'cookie' && mutatingMethods.includes(req.method)) {
+    const customHeader = req.headers['x-requested-with'] || req.headers['x-csrf-protection'];
+    const origin = req.headers.origin;
+    const allowedOriginsEnv = process.env.ALLOWED_ORIGINS
+      ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
+      : ['http://localhost:5173', 'http://localhost:3000', 'https://auuzp.github.io'];
+
+    const isOriginAllowed = origin && (allowedOriginsEnv.includes(origin) || allowedOriginsEnv.includes('*'));
+
+    if (!customHeader && !isOriginAllowed) {
+      return res.status(403).json({
+        success: false,
+        message: 'การตรวจสอบ CSRF ล้มเหลว (CSRF protection: cookie mutations require X-Requested-With header or verified Origin)'
+      });
+    }
+  }
+
   req.adminSession = session;
   req.sessionToken = token;
+  req.authMethod = method;
   next();
 }
