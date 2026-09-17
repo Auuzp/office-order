@@ -1,17 +1,67 @@
 import express from 'express';
 import cors from 'cors';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initialItems, initialOrders } from './data/initialData.js';
+import {
+  loadEnvFile,
+  verifyPin,
+  createSession,
+  getValidSession,
+  destroySession,
+  checkRateLimit,
+  recordFailedLogin,
+  resetFailedLogins,
+  extractToken,
+  requireAdminAuth
+} from './auth.js';
+import { dbService } from './firebase.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Load .env configuration
+loadEnvFile(path.join(__dirname, '..', '.env'));
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+// Proxy configuration
+const trustProxyConfig = process.env.TRUST_PROXY;
+if (trustProxyConfig !== undefined && trustProxyConfig !== 'false' && trustProxyConfig !== '') {
+  app.set('trust proxy', trustProxyConfig === 'true' ? true : (isNaN(Number(trustProxyConfig)) ? trustProxyConfig : Number(trustProxyConfig)));
+} else {
+  app.set('trust proxy', false);
+}
+
+
+const defaultOrigins = ['http://localhost:5173', 'http://localhost:3000', 'https://auuzp.github.io'];
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
+  : defaultOrigins;
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+        return callback(null, true);
+      }
+      if (process.env.NODE_ENV !== 'production') {
+        if (/^http:\/\/localhost(:\d+)?$/.test(origin) || /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) {
+          return callback(null, true);
+        }
+      }
+      // Strict allowlist: No regex or wildcard *.github.io suffix bypass
+      return callback(null, false);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-CSRF-Protection']
+  })
+);
 app.use(express.json());
 
 // Persistent Data Paths
@@ -51,15 +101,115 @@ function saveData(filePath, data) {
 let items = loadData(ITEMS_FILE, initialItems);
 let orders = loadData(ORDERS_FILE, initialOrders);
 
+// Authentication Endpoints
+
+// Login with PIN
+app.post('/api/auth/login', (req, res) => {
+  // Use req.ip which is governed by explicit trust-proxy policy (ignores attacker-controlled headers by default)
+  const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
+
+  const rateCheck = checkRateLimit(clientIp);
+  if (!rateCheck.allowed) {
+    return res.status(429).json({
+      success: false,
+      message: `คุณพยายามเข้าสู่ระบบผิดพลาดหลายครั้งเกินไป กรุณารออีก ${rateCheck.remainingSec} วินาที (Too many failed attempts)`
+    });
+  }
+
+  const { pin, password } = req.body || {};
+  const providedCredential = pin !== undefined ? String(pin).trim() : (password !== undefined ? String(password).trim() : '');
+
+  if (!providedCredential) {
+    return res.status(400).json({
+      success: false,
+      message: 'กรุณากรอกรหัส PIN (PIN is required)'
+    });
+  }
+
+  const adminPinHash = process.env.ADMIN_PIN_HASH;
+  if (!adminPinHash) {
+    return res.status(500).json({
+      success: false,
+      message: 'ระบบยังไม่ได้ตั้งค่ารหัสผู้ดูแลระบบ (ADMIN_PIN_HASH is not configured in server environment)'
+    });
+  }
+
+  const isValid = verifyPin(providedCredential, adminPinHash);
+  if (!isValid) {
+    recordFailedLogin(clientIp);
+    return res.status(401).json({
+      success: false,
+      message: 'รหัส PIN ไม่ถูกต้อง (Invalid PIN)'
+    });
+  }
+
+  resetFailedLogins(clientIp);
+  const { token, session } = createSession();
+
+  const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  const maxAgeMs = session.expiresAt - session.createdAt;
+
+  res.cookie('admin_session', token, {
+    httpOnly: true,
+    secure: isSecure,
+    sameSite: 'Lax',
+    maxAge: maxAgeMs,
+    path: '/api'
+  });
+
+  res.json({
+    success: true,
+    token,
+    expiresAt: session.expiresAt,
+    message: 'เข้าสู่ระบบในฐานะผู้ดูแลระบบเรียบร้อยแล้ว (Logged in as admin)'
+  });
+});
+
+// Logout
+app.post('/api/auth/logout', (req, res) => {
+  const token = extractToken(req);
+  if (token) {
+    destroySession(token);
+  }
+  const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  res.clearCookie('admin_session', {
+    httpOnly: true,
+    secure: isSecure,
+    sameSite: isSecure ? 'None' : 'Lax',
+    path: '/api'
+  });
+  res.json({ success: true, message: 'ออกจากระบบเรียบร้อยแล้ว (Logged out)' });
+});
+
+// Check Session
+app.get('/api/auth/session', (req, res) => {
+  const token = extractToken(req);
+  const session = getValidSession(token);
+  if (!session) {
+    return res.json({ success: true, authenticated: false, role: 'EMPLOYEE' });
+  }
+  res.json({
+    success: true,
+    authenticated: true,
+    role: 'ADMIN',
+    expiresAt: session.expiresAt
+  });
+});
+
 // API Endpoints
 
 // 1. Get all equipment items
-app.get('/api/items', (req, res) => {
-  res.json({ success: true, data: items });
+app.get('/api/items', async (req, res) => {
+  try {
+    const items = await dbService.getItems();
+    res.json({ success: true, data: items });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // 2. Add new equipment (Admin เพิ่มรายการอุปกรณ์เข้าไปในระบบ)
-app.post('/api/items', (req, res) => {
+app.post('/api/items', requireAdminAuth, async (req, res) => {
   const { name, category, stock, unit, minStock, description, imageUrl, price, id } = req.body;
   
   if (!name || name.trim() === '') {
@@ -81,78 +231,67 @@ app.post('/api/items', (req, res) => {
     createdAt: new Date().toISOString()
   };
 
-  items.unshift(newItem);
-  saveData(ITEMS_FILE, items);
-
-  res.status(201).json({ success: true, data: newItem, message: 'เพิ่มอุปกรณ์เรียบร้อยแล้ว' });
+  try {
+    const created = await dbService.createItem(newItem);
+    res.status(201).json({ success: true, data: created, message: 'เพิ่มอุปกรณ์เรียบร้อยแล้ว' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // 3. Update equipment / Restock
-app.put('/api/items/:id', (req, res) => {
+app.put('/api/items/:id', requireAdminAuth, async (req, res) => {
   const { id } = req.params;
-  const index = items.findIndex(i => i.id === id);
-  if (index === -1) {
-    return res.status(404).json({ success: false, message: 'ไม่พบอุปกรณ์ที่ต้องการแก้ไข' });
+  try {
+    const allowedFields = ['name', 'category', 'unit', 'minStock', 'description', 'imageUrl', 'price', 'isPopular', 'rating', 'stock'];
+    const updateData = {};
+    for (const key of allowedFields) {
+      if (req.body[key] !== undefined) {
+        if (key === 'stock') updateData.stock = parseInt(req.body.stock, 10);
+        else if (key === 'minStock') updateData.minStock = parseInt(req.body.minStock, 10);
+        else if (key === 'price') updateData.price = parseFloat(req.body.price);
+        else if (key === 'rating') updateData.rating = parseFloat(req.body.rating);
+        else if (key === 'isPopular') updateData.isPopular = Boolean(req.body.isPopular);
+        else updateData[key] = req.body[key];
+      }
+    }
+
+    const updated = await dbService.updateItem(id, updateData);
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'ไม่พบอุปกรณ์ที่ต้องการแก้ไข' });
+    }
+    res.json({ success: true, data: updated, message: 'อัปเดตข้อมูลอุปกรณ์เรียบร้อยแล้ว' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
-
-  const current = items[index];
-  const updated = {
-    ...current,
-    ...req.body,
-    id: current.id, // protect ID
-    stock: req.body.stock !== undefined ? parseInt(req.body.stock, 10) : current.stock,
-    minStock: req.body.minStock !== undefined ? parseInt(req.body.minStock, 10) : current.minStock,
-    price: req.body.price !== undefined ? parseFloat(req.body.price) : current.price
-  };
-
-  items[index] = updated;
-  saveData(ITEMS_FILE, items);
-
-  res.json({ success: true, data: updated, message: 'อัปเดตข้อมูลอุปกรณ์เรียบร้อยแล้ว' });
 });
 
 // 4. Delete equipment
-app.delete('/api/items/:id', (req, res) => {
+app.delete('/api/items/:id', requireAdminAuth, async (req, res) => {
   const { id } = req.params;
-  const index = items.findIndex(i => i.id === id);
-  if (index === -1) {
-    return res.status(404).json({ success: false, message: 'ไม่พบอุปกรณ์ที่ต้องการลบ' });
+  try {
+    const deleted = await dbService.deleteItem(id);
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: 'ไม่พบอุปกรณ์ที่ต้องการลบ' });
+    }
+    res.json({ success: true, data: deleted, message: 'ลบอุปกรณ์เรียบร้อยแล้ว' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
-
-  const deleted = items.splice(index, 1);
-  saveData(ITEMS_FILE, items);
-
-  res.json({ success: true, data: deleted[0], message: 'ลบอุปกรณ์เรียบร้อยแล้ว' });
 });
 
 // 5. Get all orders (with optional filters)
-app.get('/api/orders', (req, res) => {
-  const { company, status, search } = req.query;
-  let filtered = [...orders];
-
-  if (company && company !== 'ALL') {
-    filtered = filtered.filter(o => o.company === company);
+app.get('/api/orders', async (req, res) => {
+  try {
+    const filtered = await dbService.getOrders(req.query);
+    res.json({ success: true, data: filtered });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
-  if (status && status !== 'ALL') {
-    filtered = filtered.filter(o => o.status === status);
-  }
-  if (search) {
-    const q = search.toLowerCase();
-    filtered = filtered.filter(o => 
-      o.requesterName.toLowerCase().includes(q) ||
-      o.id.toLowerCase().includes(q) ||
-      o.items.some(i => i.itemName.toLowerCase().includes(q))
-    );
-  }
-
-  // Sort latest first
-  filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-  res.json({ success: true, data: filtered });
 });
 
 // 6. Submit new order (พนักงานกดสั่งซื้ออุปกรณ์)
-app.post('/api/orders', (req, res) => {
+app.post('/api/orders', async (req, res) => {
   const { requesterName, company, department, reason, reasonDetail, items: requestedItems } = req.body;
 
   // Validation
@@ -174,205 +313,156 @@ app.post('/api/orders', (req, res) => {
     return res.status(400).json({ success: false, message: 'กรุณาเลือกอุปกรณ์ที่ต้องการสั่งซื้ออย่างน้อย 1 รายการ' });
   }
 
-  // Validate stock sufficiency at the time of requisition
-  const resolvedItems = [];
-  let calculatedCost = 0;
+  try {
+    const currentItems = await dbService.getItems();
+    const resolvedItems = [];
+    let calculatedCost = 0;
 
-  for (const reqItem of requestedItems) {
-    const targetId = reqItem.itemId || reqItem.id;
-    const itemInStock = items.find(i => i.id === targetId || i.name === reqItem.itemName || i.name === reqItem.name);
-    const qty = parseInt(reqItem.quantity, 10) || 1;
-    const itemName = reqItem.itemName || reqItem.name || itemInStock?.name || 'อุปกรณ์';
-    const unit = reqItem.unit || itemInStock?.unit || 'ชิ้น';
-    const price = reqItem.price !== undefined ? parseFloat(reqItem.price) : (itemInStock?.price || 0);
+    for (const reqItem of requestedItems) {
+      const targetId = reqItem.itemId || reqItem.id;
+      const itemInStock = currentItems.find((i) => {
+        if (targetId && i.id === targetId) return true;
+        const queryName = reqItem.itemName || reqItem.name;
+        if (!queryName) return false;
+        if (i.name === queryName || i.name.includes(queryName) || queryName.includes(i.name)) return true;
+        if (queryName.includes('ปากกา') && (queryName.includes('น้ำเงิน') || queryName.includes('ลูกลื่น')) && i.id === 'SKU-002') return true;
+        if (queryName.includes('กระดาษ') && i.id === 'SKU-001') return true;
+        if (queryName.includes('เมาส์') && i.id === 'SKU-003') return true;
+        if (queryName.includes('คีย์บอร์ด') && i.id === 'SKU-004') return true;
+        return false;
+      });
 
-    if (itemInStock && qty > itemInStock.stock) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `จำนวนคงเหลือของ "${itemInStock.name}" มีเพียง ${itemInStock.stock} ${itemInStock.unit} (สั่งขอ: ${qty})` 
+
+
+      if (!itemInStock) {
+        return res.status(400).json({
+          success: false,
+          message: `ไม่พบสินค้า "${targetId || reqItem.itemName || reqItem.name || 'ไม่ระบุ'}" ในระบบ`
+        });
+      }
+
+      const qty = Number(reqItem.quantity);
+      if (!Number.isInteger(qty) || qty <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: `จำนวนสั่งซื้อของ "${itemInStock.name}" ต้องเป็นจำนวนเต็มบวกอย่างน้อย 1 (ระบุ: ${reqItem.quantity})`
+        });
+      }
+
+      if (qty > itemInStock.stock) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `จำนวนคงเหลือของ "${itemInStock.name}" มีเพียง ${itemInStock.stock} ${itemInStock.unit} (สั่งขอ: ${qty})` 
+        });
+      }
+
+      // Canonical price from DB
+      const price = Number(itemInStock.price) || 0;
+      calculatedCost += price * qty;
+      resolvedItems.push({
+        itemId: itemInStock.id,
+        itemName: itemInStock.name,
+        quantity: qty,
+        unit: itemInStock.unit,
+        price
       });
     }
 
-    calculatedCost += price * qty;
-    resolvedItems.push({
-      itemId: targetId || itemInStock?.id || `SKU-${Date.now()}`,
-      itemName,
-      quantity: qty,
-      unit,
-      price
+    // Always generate unique, collision-resistant server-side order ID
+    const timestampStr = Date.now().toString().slice(-4);
+    const randomHex = crypto.randomBytes(3).toString('hex').toUpperCase();
+    const orderId = `REQ-${new Date().getFullYear()}-${timestampStr}-${randomHex}`;
+
+    const newOrder = {
+      id: orderId,
+      createdAt: new Date().toISOString(),
+      requesterName: requesterName.trim(),
+      company: normalizedCompany || 'Illuspace (Thailand) Co., Ltd.',
+      department: department ? department.trim() : '',
+      departmentId: req.body.departmentId ? String(req.body.departmentId).trim() : '',
+      reason: reason ? String(reason).trim() : 'อุปกรณ์หมด/ใช้งานเพิ่ม',
+      priority: req.body.priority ? String(req.body.priority).trim() : 'ปกติ',
+      reasonDetail: reasonDetail ? reasonDetail.trim() : '',
+      totalCost: calculatedCost, // Trusted server-calculated total
+      status: 'PENDING',        // Strictly forced to PENDING
+      approvedBy: null,
+      approvedAt: null,
+      items: resolvedItems
+    };
+
+    const created = await dbService.createOrder(newOrder);
+    res.status(201).json({ 
+      success: true, 
+      data: created, 
+      message: `ส่งคำสั่งซื้อ ${created.id} สำเร็จแล้ว รอผู้ดูแลระบบ (Admin) อนุมัติ` 
     });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
-
-  const orderNum = orders.length + 1;
-  const orderId = `REQ-${new Date().getFullYear()}-${String(orderNum).padStart(3, '0')}`;
-
-  const newOrder = {
-    id: req.body.id || orderId,
-    createdAt: req.body.createdAt || new Date().toISOString(),
-    requesterName: requesterName.trim(),
-    company: normalizedCompany || 'Illuspace (Thailand) Co., Ltd.',
-    department: department ? department.trim() : '',
-    departmentId: req.body.departmentId || '',
-    reason: reason || 'อุปกรณ์หมด/ใช้งานเพิ่ม',
-    priority: req.body.priority || 'ปกติ',
-    reasonDetail: reasonDetail ? reasonDetail.trim() : '',
-    totalCost: req.body.totalCost !== undefined ? parseFloat(req.body.totalCost) : calculatedCost,
-    status: req.body.status || 'PENDING', // รอ Admin อนุมัติ
-    approvedBy: null,
-    approvedAt: null,
-    items: resolvedItems
-  };
-
-  orders.unshift(newOrder);
-  saveData(ORDERS_FILE, orders);
-
-  res.status(201).json({ 
-    success: true, 
-    data: newOrder, 
-    message: `ส่งคำสั่งซื้อ ${newOrder.id} สำเร็จแล้ว รอผู้ดูแลระบบ (Admin) อนุมัติ` 
-  });
 });
 
 // 7. Approve order (อนุมัติโดย Admin พร้อมตัดสต็อกอัตโนมัติ)
-app.post('/api/orders/:id/approve', (req, res) => {
+app.post('/api/orders/:id/approve', requireAdminAuth, async (req, res) => {
   const { id } = req.params;
-  const orderIndex = orders.findIndex(o => o.id === id);
-  if (orderIndex === -1) {
-    return res.status(404).json({ success: false, message: 'ไม่พบคำสั่งซื้อนี้' });
+  try {
+    const order = await dbService.approveOrderWithStockDeduction(id, 'Admin (ผู้ดูแลระบบ)');
+    const allItems = await dbService.getItems();
+    res.json({ 
+      success: true, 
+      data: order, 
+      items: allItems,
+      message: `อนุมัติคำสั่งซื้อ ${order.id} เรียบร้อยแล้ว (ตัดสต็อกอุปกรณ์สำเร็จ)` 
+    });
+  } catch (err) {
+    const status = err.message.includes('ไม่พบ') ? 404 : 400;
+    res.status(status).json({ success: false, message: err.message });
   }
-
-  const order = orders[orderIndex];
-  if (order.status === 'APPROVED') {
-    return res.status(400).json({ success: false, message: 'คำสั่งซื้อนี้ได้รับการอนุมัติไปแล้ว' });
-  }
-
-  // Deduct stock if item found
-  for (const reqItem of order.items) {
-    const invItem = items.find(i => i.id === reqItem.itemId || i.name === reqItem.itemName);
-    if (invItem) {
-      invItem.stock = Math.max(0, invItem.stock - reqItem.quantity);
-    }
-  }
-  saveData(ITEMS_FILE, items);
-
-  // Update order status
-  order.status = 'APPROVED';
-  order.approvedBy = 'Admin (ผู้ดูแลระบบ)';
-  order.approvedAt = new Date().toISOString();
-  saveData(ORDERS_FILE, orders);
-
-  res.json({ 
-    success: true, 
-    data: order, 
-    items,
-    message: `อนุมัติคำสั่งซื้อ ${order.id} เรียบร้อยแล้ว (ตัดสต็อกอุปกรณ์สำเร็จ)` 
-  });
 });
 
 // 8. Reject order (ปฏิเสธโดย Admin)
-app.post('/api/orders/:id/reject', (req, res) => {
+app.post('/api/orders/:id/reject', requireAdminAuth, async (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
-  const orderIndex = orders.findIndex(o => o.id === id);
-  if (orderIndex === -1) {
-    return res.status(404).json({ success: false, message: 'ไม่พบคำสั่งซื้อนี้' });
+  try {
+    const order = await dbService.rejectOrder(id, reason, 'Admin (ผู้ดูแลระบบ)');
+    res.json({ 
+      success: true, 
+      data: order, 
+      message: `ปฏิเสธคำสั่งซื้อ ${order.id} เรียบร้อยแล้ว` 
+    });
+  } catch (err) {
+    const status = err.message.includes('ไม่พบ') ? 404 : 400;
+    res.status(status).json({ success: false, message: err.message });
   }
-
-  const order = orders[orderIndex];
-  if (order.status === 'APPROVED') {
-    return res.status(400).json({ success: false, message: 'คำสั่งซื้อนี้ได้รับการอนุมัติแล้ว ไม่สามารถปฏิเสธย้อนหลังได้' });
-  }
-
-  order.status = 'REJECTED';
-  order.approvedBy = 'Admin (ผู้ดูแลระบบ)';
-  order.rejectedBy = 'Admin (ผู้ดูแลระบบ)';
-  order.rejectReason = reason || 'ไม่อนุมัติคำสั่งซื้อ';
-  order.approvedAt = new Date().toISOString();
-  saveData(ORDERS_FILE, orders);
-
-  res.json({ 
-    success: true, 
-    data: order, 
-    message: `ปฏิเสธคำสั่งซื้อ ${order.id} เรียบร้อยแล้ว` 
-  });
 });
 
 // 8.1 Mark as Shipping (กำลังจัดส่ง)
-app.post('/api/orders/:id/shipping', (req, res) => {
+app.post('/api/orders/:id/shipping', requireAdminAuth, async (req, res) => {
   const { id } = req.params;
-  const order = orders.find(o => o.id === id);
-  if (!order) {
-    return res.status(404).json({ success: false, message: 'ไม่พบคำสั่งซื้อนี้' });
+  try {
+    const order = await dbService.shipOrder(id);
+    res.json({ 
+      success: true, 
+      data: order, 
+      message: `อัปเดตสถานะคำสั่งซื้อ ${order.id} เป็น "กำลังจัดส่ง" แล้ว` 
+    });
+  } catch (err) {
+    const status = err.message.includes('ไม่พบ') ? 404 : 400;
+    res.status(status).json({ success: false, message: err.message });
   }
-
-  order.status = 'SHIPPING';
-  saveData(ORDERS_FILE, orders);
-
-  res.json({ 
-    success: true, 
-    data: order, 
-    message: `อัปเดตสถานะคำสั่งซื้อ ${order.id} เป็น "กำลังจัดส่ง" แล้ว` 
-  });
 });
 
 // 9. Dashboard Statistics
-app.get('/api/stats', (req, res) => {
-  const totalOrders = orders.length;
-  const pendingOrders = orders.filter(o => o.status === 'PENDING').length;
-  const approvedOrders = orders.filter(o => o.status === 'APPROVED').length;
-  const rejectedOrders = orders.filter(o => o.status === 'REJECTED').length;
-
-  const lowStockItems = items.filter(i => i.stock <= i.minStock);
-
-  // Company breakdown
-  const companyCounts = {
-    'Illuspace (Thailand) Co., Ltd.': 0,
-    'Live Lighting Co., Ltd.': 0,
-    'True Innovation Tech Co., Ltd.': 0,
-    Illu: 0,
-    LL: 0,
-    True: 0
-  };
-  orders.forEach(o => {
-    if (o.company === 'Illu' || o.company?.includes('Illuspace')) {
-      companyCounts['Illuspace (Thailand) Co., Ltd.']++;
-      companyCounts.Illu++;
-    } else if (o.company === 'LL' || o.company?.includes('Live Lighting')) {
-      companyCounts['Live Lighting Co., Ltd.']++;
-      companyCounts.LL++;
-    } else if (o.company === 'True' || o.company?.includes('True Innovation')) {
-      companyCounts['True Innovation Tech Co., Ltd.']++;
-      companyCounts.True++;
-    }
-  });
-
-  // Reason breakdown
-  const reasonCounts = {
-    'ชำรุด': 0,
-    'สูญหาย': 0,
-    'ไม่เคยได้รับ': 0,
-    'พนักงานใหม่': 0
-  };
-  orders.forEach(o => {
-    if (reasonCounts[o.reason] !== undefined) {
-      reasonCounts[o.reason]++;
-    }
-  });
-
-  res.json({
-    success: true,
-    data: {
-      totalOrders,
-      pendingOrders,
-      approvedOrders,
-      rejectedOrders,
-      totalItemsCount: items.length,
-      lowStockItemsCount: lowStockItems.length,
-      lowStockItems,
-      companyCounts,
-      reasonCounts
-    }
-  });
+app.get('/api/stats', async (req, res) => {
+  try {
+    const stats = await dbService.getStats();
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // 10. Serve client in production
@@ -384,9 +474,16 @@ if (fs.existsSync(distPath)) {
   });
 }
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`=================================================`);
-  console.log(` Office Requisition Server is running on port ${PORT}`);
-  console.log(` http://localhost:${PORT}`);
-  console.log(`=================================================`);
-});
+const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(__filename);
+
+if (isDirectRun && process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`=================================================`);
+    console.log(` Office Requisition Server is running on port ${PORT}`);
+    console.log(` http://localhost:${PORT}`);
+    console.log(`=================================================`);
+  });
+}
+
+export default app;
+export { app };

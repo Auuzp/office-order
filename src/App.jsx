@@ -7,7 +7,7 @@ import CartModal from './components/CartModal';
 import OrderTracking from './components/OrderTracking';
 import AdminApproval from './components/AdminApproval';
 import AdminInventory from './components/AdminInventory';
-import { api } from './services/api';
+import { api, onUnauthorized } from './services/api';
 import { 
   INITIAL_PRODUCTS, 
   INITIAL_ORDERS, 
@@ -90,7 +90,7 @@ export default function App() {
         api.getItems(),
         api.getOrders()
       ]);
-      if (cloudItems && Array.isArray(cloudItems) && cloudItems.length > 0) {
+      if (cloudItems && Array.isArray(cloudItems)) {
         setProducts(cloudItems);
       }
       if (cloudOrders && Array.isArray(cloudOrders)) {
@@ -105,15 +105,33 @@ export default function App() {
     }
   };
 
-  // Initial fetch and 4-second real-time polling loop
+  // Initial fetch, session validation, and real-time polling loop
   useEffect(() => {
     fetchCloudData(false);
+
+    // Validate if current user has an active server admin session
+    api.checkSession().then((res) => {
+      if (res && res.authenticated && res.role === 'ADMIN') {
+        setCurrentRole('ADMIN');
+      } else {
+        setCurrentRole('EMPLOYEE');
+      }
+    });
+
+    // Auto-revert to Employee when any protected API returns 401
+    const unsubscribeAuth = onUnauthorized(() => {
+      setCurrentRole('EMPLOYEE');
+      showToast('เซสชันหมดอายุหรือไม่ได้รับอนุญาต กรุณาเข้าสู่ระบบใหม่', 'error');
+    });
 
     const interval = setInterval(() => {
       fetchCloudData(true);
     }, 4000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      unsubscribeAuth();
+    };
   }, []);
 
   // Cart Operations
@@ -171,34 +189,13 @@ export default function App() {
       showToast(`ส่งคำขอเบิก ${serverOrder.id} สำเร็จแล้ว! ซิงค์ขึ้นระบบกลางเรียบร้อย`, 'success');
       fetchCloudData(true);
     } catch (err) {
-      console.warn('API submission failed, using local queue:', err);
-      const newId = `REQ-${new Date().getFullYear()}-${String(orders.length + 1).padStart(3, '0')}`;
-      const fallbackOrder = {
-        id: newId,
-        createdAt: new Date().toISOString(),
-        requesterName: payload.requesterName,
-        company: payload.company,
-        department: payload.department,
-        departmentId: payload.departmentId,
-        reason: payload.reason,
-        priority: payload.priority,
-        reasonDetail: payload.reasonDetail,
-        totalCost: payload.totalCost,
-        status: 'PENDING',
-        approvedBy: null,
-        approvedAt: null,
-        items: payload.items
-      };
-
-      setOrders((prev) => [fallbackOrder, ...prev]);
-      setCartItems([]);
-      setIsCartModalOpen(false);
-      setActiveTab('tracking');
-      showToast(`ส่งคำขอเบิก ${newId} สำเร็จแล้ว (บันทึกข้อมูลเรียบร้อย)`, 'success');
+      console.error('API submission failed:', err);
+      showToast(err.message || 'ไม่สามารถส่งคำขอเบิกได้ กรุณาตรวจสอบข้อมูลและลองใหม่อีกครั้ง', 'error');
     } finally {
       setIsSubmitting(false);
     }
   };
+
 
   // Approve Requisition (Syncs to Central API and updates stock)
   const handleApproveOrder = async (orderId) => {
@@ -231,30 +228,8 @@ export default function App() {
       }
       showToast(`อนุมัติคำขอ ${orderId} สำเร็จ (ตัดสต็อกและซิงค์ระบบกลางเรียบร้อย)`, 'success');
     } catch (err) {
-      console.warn('API approve failed, applying fallback:', err);
-      // Fallback local deduct
-      setProducts((prev) =>
-        prev.map((p) => {
-          const matched = order.items.find((i) => i.itemId === p.id || i.itemName === p.name);
-          if (matched) {
-            return { ...p, stock: Math.max(0, p.stock - matched.quantity) };
-          }
-          return p;
-        })
-      );
-      setOrders((prev) =>
-        prev.map((o) =>
-          o.id === orderId
-            ? {
-                ...o,
-                status: 'APPROVED',
-                approvedBy: 'Admin (ผู้ดูแลระบบ)',
-                approvedAt: new Date().toISOString()
-              }
-            : o
-        )
-      );
-      showToast(`อนุมัติคำขอ ${orderId} สำเร็จ (ตัดสต็อกอุปกรณ์เรียบร้อย)`, 'success');
+      console.error('API approve failed:', err);
+      showToast(err.message || `ไม่สามารถอนุมัติคำขอ ${orderId} ได้`, 'error');
     }
   };
 
@@ -265,12 +240,11 @@ export default function App() {
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? (updatedOrder || { ...o, status: 'SHIPPING' }) : o))
       );
+      showToast(`อัปเดตคำขอ ${orderId} เป็น "กำลังจัดส่ง" แล้ว`, 'info');
     } catch (err) {
-      setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: 'SHIPPING' } : o))
-      );
+      console.error('API shipping failed:', err);
+      showToast(err.message || `ไม่สามารถอัปเดตสถานะคำขอ ${orderId} ได้`, 'error');
     }
-    showToast(`อัปเดตคำขอ ${orderId} เป็น "กำลังจัดส่ง" แล้ว`, 'info');
   };
 
   // Reject Requisition
@@ -280,46 +254,47 @@ export default function App() {
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? (updatedOrder || { ...o, status: 'REJECTED', rejectReason: reason }) : o))
       );
+      showToast(`ปฏิเสธคำขอ ${orderId} เรียบร้อยแล้ว`, 'info');
     } catch (err) {
-      setOrders((prev) =>
-        prev.map((o) =>
-          o.id === orderId
-            ? {
-                ...o,
-                status: 'REJECTED',
-                approvedBy: 'Admin (ผู้ดูแลระบบ)',
-                rejectReason: reason || 'ไม่อนุมัติ',
-                approvedAt: new Date().toISOString()
-              }
-            : o
-        )
-      );
+      console.error('API reject failed:', err);
+      showToast(err.message || `ไม่สามารถปฏิเสธคำขอ ${orderId} ได้`, 'error');
     }
-    showToast(`ปฏิเสธคำขอ ${orderId} เรียบร้อยแล้ว`, 'info');
   };
 
   // Switch Role
-  const handleRoleToggleClick = () => {
+  const handleRoleToggleClick = async () => {
     if (currentRole === 'EMPLOYEE') {
       setPinInput('');
       setPinError('');
       setIsPinModalOpen(true);
     } else {
+      try {
+        await api.logout();
+      } catch (err) {
+        console.warn('Logout error:', err.message);
+      }
       setCurrentRole('EMPLOYEE');
       setActiveTab('dashboard');
-      showToast('กลับสู่โหมดพนักงานทั่วไป');
+      showToast('ออกจากระบบผู้ดูแลระบบ กลับสู่โหมดพนักงานทั่วไป');
     }
   };
 
-  const handlePinSubmit = (e) => {
+  const handlePinSubmit = async (e) => {
     e.preventDefault();
-    if (pinInput === '1234' || pinInput === '') {
+    const trimmed = pinInput.trim();
+    if (!trimmed) {
+      setPinError('กรุณากรอกรหัส PIN');
+      return;
+    }
+
+    try {
+      await api.login(trimmed);
       setCurrentRole('ADMIN');
       setIsPinModalOpen(false);
       setActiveTab('tracking');
       showToast('เข้าสู่โหมดผู้ดูแลระบบ (Admin) เรียบร้อยแล้ว', 'success');
-    } else {
-      setPinError('รหัส PIN ไม่ถูกต้อง (รหัสเริ่มต้น: 1234)');
+    } catch (err) {
+      setPinError(err.message || 'รหัส PIN ไม่ถูกต้อง');
     }
   };
 
@@ -424,12 +399,8 @@ export default function App() {
                   showToast(`เพิ่มอุปกรณ์ "${newItem.name}" เรียบร้อยแล้ว`);
                   fetchCloudData(true);
                 } catch (err) {
-                  const created = {
-                    ...newItem,
-                    id: `SKU-${Date.now()}`
-                  };
-                  setProducts((prev) => [created, ...prev]);
-                  showToast(`เพิ่มอุปกรณ์ "${newItem.name}" เรียบร้อยแล้ว`);
+                  console.error('API createItem failed:', err);
+                  showToast(err.message || 'ไม่สามารถเพิ่มอุปกรณ์ได้', 'error');
                 }
               }}
               onUpdateItem={async (id, updateData) => {
@@ -441,10 +412,8 @@ export default function App() {
                   showToast('อัปเดตข้อมูลอุปกรณ์เรียบร้อยแล้ว');
                   fetchCloudData(true);
                 } catch (err) {
-                  setProducts((prev) =>
-                    prev.map((item) => (item.id === id ? { ...item, ...updateData } : item))
-                  );
-                  showToast('อัปเดตข้อมูลอุปกรณ์เรียบร้อยแล้ว');
+                  console.error('API updateItem failed:', err);
+                  showToast(err.message || 'ไม่สามารถอัปเดตข้อมูลอุปกรณ์ได้', 'error');
                 }
               }}
               onDeleteItem={async (id) => {
@@ -454,8 +423,8 @@ export default function App() {
                   showToast('ลบรายการอุปกรณ์เรียบร้อยแล้ว');
                   fetchCloudData(true);
                 } catch (err) {
-                  setProducts((prev) => prev.filter((item) => item.id !== id));
-                  showToast('ลบรายการอุปกรณ์เรียบร้อยแล้ว');
+                  console.error('API deleteItem failed:', err);
+                  showToast(err.message || 'ไม่สามารถลบรายการอุปกรณ์ได้', 'error');
                 }
               }}
             />
@@ -498,8 +467,8 @@ export default function App() {
               <input
                 type="password"
                 autoFocus
-                maxLength={6}
-                placeholder="ใส่รหัส PIN (เริ่มต้น: 1234)"
+                maxLength={20}
+                placeholder="ใส่รหัส PIN ผู้ดูแลระบบ"
                 value={pinInput}
                 onChange={(e) => setPinInput(e.target.value)}
                 className="w-full text-center text-xl tracking-widest py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
@@ -507,9 +476,6 @@ export default function App() {
               {pinError && (
                 <span className="text-xs text-rose-600 font-medium block">{pinError}</span>
               )}
-              <div className="text-[11px] text-slate-400">
-                รหัสผ่านเริ่มต้นคือ: <strong>1234</strong>
-              </div>
 
               <div className="flex space-x-2 pt-2">
                 <button

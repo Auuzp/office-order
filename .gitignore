@@ -4,3 +4,7 @@ dist
 .env
 .env.local
 *.log
+*serviceAccountKey*.json
+*service-account*.json
+firebase-key*.json
+firebase*.json
