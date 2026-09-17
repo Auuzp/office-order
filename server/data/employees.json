@@ -1,0 +1,67 @@
+[
+  {
+    "id": "EMP-001",
+    "employeeCode": "EMP-1001",
+    "name": "สมชาย ใจดี",
+    "company": "Illuspace (Thailand) Co., Ltd.",
+    "department": "ฝ่ายเทคโนโลยีสารสนเทศ (IT)",
+    "departmentId": "IT",
+    "position": "Senior Software Engineer",
+    "email": "somchai.j@illuspace.co.th",
+    "phone": "081-234-5678",
+    "status": "ACTIVE",
+    "createdAt": "2026-09-01T08:00:00.000Z"
+  },
+  {
+    "id": "EMP-002",
+    "employeeCode": "EMP-1002",
+    "name": "ศิริพร บุญรักษา",
+    "company": "Live Lighting Co., Ltd.",
+    "department": "ฝ่ายการตลาด (Marketing)",
+    "departmentId": "MKT",
+    "position": "Marketing Lead",
+    "email": "siriporn.b@livelighting.co.th",
+    "phone": "082-345-6789",
+    "status": "ACTIVE",
+    "createdAt": "2026-09-01T08:30:00.000Z"
+  },
+  {
+    "id": "EMP-003",
+    "employeeCode": "EMP-1003",
+    "name": "กิตติศักดิ์ พรหมดี",
+    "company": "True Innovation Tech Co., Ltd.",
+    "department": "ฝ่ายปฏิบัติการ (Operations)",
+    "departmentId": "OPS",
+    "position": "Operations Supervisor",
+    "email": "kittisak.p@trueinnovation.co.th",
+    "phone": "083-456-7890",
+    "status": "ACTIVE",
+    "createdAt": "2026-09-01T09:00:00.000Z"
+  },
+  {
+    "id": "EMP-004",
+    "employeeCode": "EMP-1004",
+    "name": "อัญชลี รัตนโชติ",
+    "company": "Illuspace (Thailand) Co., Ltd.",
+    "department": "ฝ่ายทรัพยากรบุคคล (HR)",
+    "departmentId": "HR",
+    "position": "HR Specialist",
+    "email": "anchalee.r@illuspace.co.th",
+    "phone": "084-567-8901",
+    "status": "ACTIVE",
+    "createdAt": "2026-09-01T09:30:00.000Z"
+  },
+  {
+    "id": "EMP-005",
+    "employeeCode": "EMP-1005",
+    "name": "วรภัทร ชัยมงคล",
+    "company": "Live Lighting Co., Ltd.",
+    "department": "ฝ่ายบัญชีและการเงิน (Finance)",
+    "departmentId": "ACC",
+    "position": "Senior Accountant",
+    "email": "worapat.c@livelighting.co.th",
+    "phone": "085-678-9012",
+    "status": "ACTIVE",
+    "createdAt": "2026-09-01T10:00:00.000Z"
+  }
+]

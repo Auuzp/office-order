@@ -3,7 +3,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { initialItems, initialOrders } from './data/initialData.js';
+import { initialItems, initialOrders, initialEmployees } from './data/initialData.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,6 +11,7 @@ const __dirname = path.dirname(__filename);
 const DATA_DIR = path.join(__dirname, 'data');
 const ITEMS_FILE = path.join(DATA_DIR, 'inventory.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
+const EMPLOYEES_FILE = path.join(DATA_DIR, 'employees.json');
 
 // Ensure local data dir exists for fallback
 if (!fs.existsSync(DATA_DIR)) {
@@ -43,6 +44,7 @@ function saveLocalData(filePath, data) {
 
 let localItems = loadLocalData(ITEMS_FILE, initialItems);
 let localOrders = loadLocalData(ORDERS_FILE, initialOrders);
+let localEmployees = loadLocalData(EMPLOYEES_FILE, initialEmployees);
 
 // Firebase Initialization
 let firestoreDb = null;
@@ -522,5 +524,108 @@ export const dbService = {
       companyCounts,
       reasonCounts
     };
+  },
+
+  // Employees / Personnel
+  async getEmployees(filters = {}) {
+    const db = getDb();
+    let employeesList = [];
+
+    if (db) {
+      const snapshot = await db.collection('employees').get();
+      if (snapshot.empty) {
+        // Seed initial employees if collection is completely empty
+        const batch = db.batch();
+        initialEmployees.forEach((emp) => {
+          batch.set(db.collection('employees').doc(emp.id), emp);
+        });
+        await batch.commit();
+        employeesList = [...initialEmployees];
+      } else {
+        employeesList = snapshot.docs.map((doc) => doc.data());
+      }
+    } else {
+      localEmployees = loadLocalData(EMPLOYEES_FILE, initialEmployees);
+      employeesList = [...localEmployees];
+    }
+
+    const { company, department, search } = filters;
+    if (company && company !== 'ALL') {
+      employeesList = employeesList.filter((e) => e.company === company);
+    }
+    if (department && department !== 'ALL') {
+      employeesList = employeesList.filter((e) => e.department === department || e.departmentId === department);
+    }
+    if (search) {
+      const q = search.toLowerCase();
+      employeesList = employeesList.filter(
+        (e) =>
+          e.name?.toLowerCase().includes(q) ||
+          e.employeeCode?.toLowerCase().includes(q) ||
+          e.position?.toLowerCase().includes(q) ||
+          e.email?.toLowerCase().includes(q) ||
+          e.id?.toLowerCase().includes(q)
+      );
+    }
+
+    // Sort by employeeCode or name
+    employeesList.sort((a, b) => (a.employeeCode || a.id || '').localeCompare(b.employeeCode || b.id || ''));
+    return employeesList;
+  },
+
+  async getEmployeeById(id) {
+    const db = getDb();
+    if (db) {
+      const doc = await db.collection('employees').doc(id).get();
+      return doc.exists ? doc.data() : null;
+    }
+    return localEmployees.find((e) => e.id === id) || null;
+  },
+
+  async createEmployee(employee) {
+    const db = getDb();
+    if (db) {
+      await db.collection('employees').doc(employee.id).set(employee);
+      return employee;
+    }
+    localEmployees.unshift(employee);
+    saveLocalData(EMPLOYEES_FILE, localEmployees);
+    return employee;
+  },
+
+  async updateEmployee(id, updateData) {
+    const db = getDb();
+    if (db) {
+      const ref = db.collection('employees').doc(id);
+      const doc = await ref.get();
+      if (!doc.exists) return null;
+      await ref.update(updateData);
+      const updated = await ref.get();
+      return updated.data();
+    }
+
+    const index = localEmployees.findIndex((e) => e.id === id);
+    if (index === -1) return null;
+    Object.assign(localEmployees[index], updateData);
+    saveLocalData(EMPLOYEES_FILE, localEmployees);
+    return localEmployees[index];
+  },
+
+  async deleteEmployee(id) {
+    const db = getDb();
+    if (db) {
+      const ref = db.collection('employees').doc(id);
+      const doc = await ref.get();
+      if (!doc.exists) return null;
+      const data = doc.data();
+      await ref.delete();
+      return data;
+    }
+
+    const index = localEmployees.findIndex((e) => e.id === id);
+    if (index === -1) return null;
+    const deleted = localEmployees.splice(index, 1);
+    saveLocalData(EMPLOYEES_FILE, localEmployees);
+    return deleted[0];
   }
 };

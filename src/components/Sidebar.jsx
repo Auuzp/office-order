@@ -6,7 +6,8 @@ import {
   ClipboardList, 
   ShieldCheck, 
   PlusCircle, 
-  X 
+  X,
+  Users
 } from 'lucide-react';
 
 export default function Sidebar({ 
@@ -41,6 +42,11 @@ export default function Sidebar({
         id: 'admin-inventory',
         label: 'จัดการรายการอุปกรณ์ (Admin)',
         icon: Boxes
+      },
+      {
+        id: 'admin-employees',
+        label: 'จัดการข้อมูลพนักงาน (Admin)',
+        icon: Users
       }
     );
   }

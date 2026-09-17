@@ -25,6 +25,7 @@ export default function CartModal({
   onSubmitRequisition,
   currentDepartment,
   departments,
+  employees = [],
   isSubmitting 
 }) {
   const [requesterName, setRequesterName] = useState('');
@@ -262,18 +263,42 @@ export default function CartModal({
 
           {/* 3. ผู้ขอเบิก */}
           <div>
-            <label className="text-xs sm:text-sm font-bold text-slate-800 flex items-center space-x-1.5 mb-2">
-              <User className="w-4 h-4 text-blue-600" />
-              <span>ชื่อ-นามสกุล ผู้ขอซื้อ/เบิก <span className="text-rose-500">*</span></span>
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="ระบุชื่อ-นามสกุล ผู้ขอเบิก (หรือแผนก/ฝ่าย)..."
-              value={requesterName}
-              onChange={(e) => setRequesterName(e.target.value)}
-              className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-medium"
-            />
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs sm:text-sm font-bold text-slate-800 flex items-center space-x-1.5">
+                <User className="w-4 h-4 text-blue-600" />
+                <span>ชื่อ-นามสกุล ผู้ขอซื้อ/เบิก <span className="text-rose-500">*</span></span>
+              </label>
+              {employees && employees.length > 0 && (
+                <span className="text-[11px] text-indigo-600 font-medium">
+                  (มีระบบช่วยเติมจากรายชื่อพนักงาน)
+                </span>
+              )}
+            </div>
+            <div className="relative">
+              <input
+                type="text"
+                list="employee-suggestions"
+                required
+                placeholder="ระบุชื่อ-นามสกุล ผู้ขอเบิก (สามารถเลือกจากรายชื่อได้)..."
+                value={requesterName}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setRequesterName(val);
+                  const found = employees?.find(emp => emp.name === val);
+                  if (found && found.company) {
+                    setCompany(found.company);
+                  }
+                }}
+                className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-medium"
+              />
+              <datalist id="employee-suggestions">
+                {employees?.map((emp) => (
+                  <option key={emp.id} value={emp.name}>
+                    {emp.employeeCode ? `[${emp.employeeCode}] ` : ''}{emp.department} - {emp.company?.split(' ')[0]}
+                  </option>
+                ))}
+              </datalist>
+            </div>
           </div>
 
           {/* 4. เหตุผลที่ขอซื้อ */}

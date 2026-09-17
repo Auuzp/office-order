@@ -12,7 +12,9 @@ import {
   X, 
   Save,
   Layers,
-  FolderOpen
+  FolderOpen,
+  Minus,
+  AlertTriangle
 } from 'lucide-react';
 import { CATEGORIES } from '../data/mockData';
 
@@ -38,12 +40,14 @@ export default function AdminInventory({
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
 
-  // Form states (ตัดสต็อกเริ่มต้นและเตือนสต็อกต่ำออกตามโจทย์ข้อ 3)
+  // Form states (รองรับการกำหนดและแก้ไขสต็อกคงเหลือ และสต็อกขั้นต่ำ)
   const [formData, setFormData] = useState({
     name: '',
     category: 'เครื่องเขียน',
     unit: 'ชิ้น',
     price: 50,
+    stock: 20,
+    minStock: 5,
     description: '',
     imageUrl: PRESET_IMAGES[0].url
   });
@@ -70,6 +74,8 @@ export default function AdminInventory({
       category: 'เครื่องเขียน',
       unit: 'ชิ้น',
       price: 50,
+      stock: 20,
+      minStock: 5,
       description: '',
       imageUrl: PRESET_IMAGES[0].url
     });
@@ -84,11 +90,20 @@ export default function AdminInventory({
       category: item.category,
       unit: item.unit,
       price: item.price || 50,
+      stock: item.stock !== undefined ? item.stock : 0,
+      minStock: item.minStock !== undefined ? item.minStock : 5,
       description: item.description || '',
       imageUrl: item.imageUrl || PRESET_IMAGES[0].url
     });
     setImageUploadType(item.imageUrl?.startsWith('data:') ? 'upload' : 'url');
     setIsAddModalOpen(true);
+  };
+
+  // Quick adjust stock directly in table (+/- or restock)
+  const handleQuickAdjustStock = (item, delta) => {
+    const currentStock = typeof item.stock === 'number' ? item.stock : 0;
+    const newStock = Math.max(0, currentStock + delta);
+    onUpdateItem(item.id, { stock: newStock });
   };
 
   // Handle local image file upload (Base64)
@@ -111,12 +126,26 @@ export default function AdminInventory({
     e.preventDefault();
     if (!formData.name.trim()) return;
 
+    const stockNum = Math.max(0, parseInt(formData.stock, 10) || 0);
+    const minStockNum = Math.max(0, parseInt(formData.minStock, 10) || 0);
+    const priceNum = Math.max(0, parseFloat(formData.price) || 0);
+
+    const submissionData = {
+      name: formData.name.trim(),
+      category: formData.category,
+      unit: formData.unit.trim(),
+      price: priceNum,
+      stock: stockNum,
+      minStock: minStockNum,
+      description: formData.description ? formData.description.trim() : '',
+      imageUrl: formData.imageUrl
+    };
+
     if (editingItem) {
-      onUpdateItem(editingItem.id, formData);
+      onUpdateItem(editingItem.id, submissionData);
     } else {
       onAddItem({
-        ...formData,
-        stock: 99, // default available stock in system
+        ...submissionData,
         isPopular: false
       });
     }
@@ -149,24 +178,14 @@ export default function AdminInventory({
       </div>
 
       {/* Overview Stat Badges */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex items-center space-x-3.5">
           <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
             <Boxes className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-xs text-slate-500">จำนวนอุปกรณ์ทั้งหมด</span>
+            <span className="text-xs text-slate-500">อุปกรณ์ทั้งหมด</span>
             <div className="text-xl font-bold text-slate-900">{items.length} รายการ</div>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex items-center space-x-3.5">
-          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-            <Layers className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-xs text-slate-500">หมวดหมู่อุปกรณ์</span>
-            <div className="text-xl font-bold text-blue-600">5 หมวดหมู่</div>
           </div>
         </div>
 
@@ -175,8 +194,34 @@ export default function AdminInventory({
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-xs text-slate-500">สถานะแคตตาล็อก</span>
-            <div className="text-xl font-bold text-emerald-600">พร้อมเปิดให้เบิก</div>
+            <span className="text-xs text-slate-500">สต็อกปกติ</span>
+            <div className="text-xl font-bold text-emerald-600">
+              {items.filter(i => (i.stock || 0) > (i.minStock !== undefined ? i.minStock : 5)).length} รายการ
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex items-center space-x-3.5">
+          <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+            <AlertTriangle className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-500">สต็อกเหลือน้อย</span>
+            <div className="text-xl font-bold text-amber-600">
+              {items.filter(i => (i.stock || 0) > 0 && (i.stock || 0) <= (i.minStock !== undefined ? i.minStock : 5)).length} รายการ
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex items-center space-x-3.5">
+          <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+            <X className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-500">สินค้าหมดสต็อก</span>
+            <div className="text-xl font-bold text-rose-600">
+              {items.filter(i => (i.stock || 0) === 0).length} รายการ
+            </div>
           </div>
         </div>
       </div>
@@ -211,7 +256,7 @@ export default function AdminInventory({
         </div>
       </div>
 
-      {/* Equipment Table (ตัดคอลัมน์จำนวนคงเหลือและปุ่มปรับสต็อกออกทั้งหมดตามโจทย์ข้อ 4) */}
+      {/* Equipment Table (แสดงข้อมูลครบถ้วน พร้อมจำนวนสต็อกคงเหลือและปุ่มปรับสต็อกด่วน) */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
@@ -219,83 +264,143 @@ export default function AdminInventory({
               <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-bold">
                 <th className="py-3.5 px-4">รูป & ชื่ออุปกรณ์</th>
                 <th className="py-3.5 px-4">หมวดหมู่</th>
-                <th className="py-3.5 px-4">หน่วยนับ</th>
                 <th className="py-3.5 px-4">ราคาประเมิน</th>
+                <th className="py-3.5 px-4">สต็อกคงเหลือ & ปรับสต็อกด่วน</th>
                 <th className="py-3.5 px-4 text-center">สถานะ</th>
                 <th className="py-3.5 px-4 text-right">การจัดการ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredItems.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
-                  {/* Item Image & Title */}
-                  <td className="py-3.5 px-4">
-                    <div className="flex items-center space-x-3">
-                      <img
-                        src={item.imageUrl || PRESET_IMAGES[0].url}
-                        alt={item.name}
-                        className="w-12 h-12 rounded-xl object-cover bg-slate-100 shrink-0 border border-slate-200"
-                        onError={(e) => {
-                          e.target.src = PRESET_IMAGES[0].url;
-                        }}
-                      />
-                      <div>
-                        <div className="font-semibold text-slate-900 text-xs sm:text-sm">{item.name}</div>
-                        <div className="text-[11px] text-slate-400 line-clamp-1">{item.description || 'รหัส: ' + item.id}</div>
+              {filteredItems.map((item) => {
+                const stockVal = item.stock !== undefined ? item.stock : 0;
+                const minStockVal = item.minStock !== undefined ? item.minStock : 5;
+                const isOutOfStock = stockVal === 0;
+                const isLowStock = stockVal > 0 && stockVal <= minStockVal;
+
+                return (
+                  <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
+                    {/* Item Image & Title */}
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center space-x-3">
+                        <img
+                          src={item.imageUrl || PRESET_IMAGES[0].url}
+                          alt={item.name}
+                          className="w-12 h-12 rounded-xl object-cover bg-slate-100 shrink-0 border border-slate-200"
+                          onError={(e) => {
+                            e.target.src = PRESET_IMAGES[0].url;
+                          }}
+                        />
+                        <div>
+                          <div className="font-semibold text-slate-900 text-xs sm:text-sm">{item.name}</div>
+                          <div className="text-[11px] text-slate-400 line-clamp-1">{item.description || 'รหัส: ' + item.id}</div>
+                        </div>
                       </div>
-                    </div>
-                  </td>
+                    </td>
 
-                  {/* Category */}
-                  <td className="py-3.5 px-4">
-                    <span className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-slate-100 text-slate-700">
-                      {item.category}
-                    </span>
-                  </td>
+                    {/* Category */}
+                    <td className="py-3.5 px-4">
+                      <span className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-slate-100 text-slate-700">
+                        {item.category}
+                      </span>
+                    </td>
 
-                  {/* Unit */}
-                  <td className="py-3.5 px-4 font-medium text-slate-800">
-                    {item.unit}
-                  </td>
+                    {/* Price */}
+                    <td className="py-3.5 px-4 font-bold text-slate-900">
+                      ฿{(item.price || 0).toLocaleString()} / {item.unit || 'ชิ้น'}
+                    </td>
 
-                  {/* Price */}
-                  <td className="py-3.5 px-4 font-bold text-slate-900">
-                    ฿{(item.price || 0).toLocaleString()}
-                  </td>
+                    {/* Stock & Quick Adjust */}
+                    <td className="py-3.5 px-4">
+                      <div className="flex flex-col space-y-1">
+                        <div className="flex items-center space-x-2">
+                          <span className={`px-2 py-0.5 rounded-md font-bold text-xs ${
+                            isOutOfStock
+                              ? 'bg-rose-100 text-rose-800'
+                              : isLowStock
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {stockVal.toLocaleString()} {item.unit || 'ชิ้น'}
+                          </span>
+                          
+                          {/* Quick Adjust Buttons (+ / - / +10) */}
+                          <div className="inline-flex items-center space-x-1">
+                            <button
+                              onClick={() => handleQuickAdjustStock(item, -1)}
+                              disabled={stockVal <= 0}
+                              className="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-slate-700 transition-colors"
+                              title="ลดสต็อก 1"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => handleQuickAdjustStock(item, 1)}
+                              className="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 transition-colors"
+                              title="เพิ่มสต็อก 1"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => handleQuickAdjustStock(item, 10)}
+                              className="px-1.5 h-6 rounded-md bg-indigo-50 hover:bg-indigo-100 text-[10px] font-bold text-indigo-700 flex items-center justify-center transition-colors"
+                              title="เติมสต็อกด่วน +10"
+                            >
+                              +10
+                            </button>
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-slate-400">
+                          เตือนขั้นต่ำ: {minStockVal} {item.unit || 'ชิ้น'}
+                        </span>
+                      </div>
+                    </td>
 
-                  {/* Status */}
-                  <td className="py-3.5 px-4 text-center">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1"></span>
-                      เปิดให้เบิก
-                    </span>
-                  </td>
+                    {/* Status */}
+                    <td className="py-3.5 px-4 text-center">
+                      {isOutOfStock ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 mr-1.5"></span>
+                          สินค้าหมด
+                        </span>
+                      ) : isLowStock ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                          <AlertTriangle className="w-3 h-3 text-amber-500 mr-1" />
+                          ใกล้หมด
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
+                          พร้อมเบิก
+                        </span>
+                      )}
+                    </td>
 
-                  {/* Actions */}
-                  <td className="py-3.5 px-4 text-right">
-                    <div className="inline-flex items-center space-x-1.5">
-                      <button
-                        onClick={() => handleOpenEditModal(item)}
-                        className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
-                        title="แก้ไขข้อมูลอุปกรณ์"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (window.confirm(`ต้องการลบรายการ "${item.name}" หรือไม่?`)) {
-                            onDeleteItem(item.id);
-                          }
-                        }}
-                        className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                        title="ลบรายการ"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    {/* Actions */}
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="inline-flex items-center space-x-1.5">
+                        <button
+                          onClick={() => handleOpenEditModal(item)}
+                          className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                          title="แก้ไขข้อมูลและสต็อกอุปกรณ์"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`ต้องการลบรายการ "${item.name}" หรือไม่?`)) {
+                              onDeleteItem(item.id);
+                            }
+                          }}
+                          className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                          title="ลบรายการ"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -371,9 +476,41 @@ export default function AdminInventory({
                   type="number"
                   min="0"
                   value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: parseInt(e.target.value, 10) || 0 })}
+                  onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
                 />
+              </div>
+
+              {/* Stock Quantity & Min Stock Alert */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    จำนวนสต็อกคงเหลือ <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    placeholder="20"
+                    value={formData.stock}
+                    onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    สต็อกขั้นต่ำ (เตือนใกล้หมด)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="5"
+                    value={formData.minStock}
+                    onChange={(e) => setFormData({ ...formData, minStock: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
               </div>
 
               {/* Description */}

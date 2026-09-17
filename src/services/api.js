@@ -198,5 +198,36 @@ export const api = {
       method: 'POST'
     });
     return res.data;
+  },
+
+  // Employees
+  async getEmployees(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    const endpoint = `/employees${query ? `?${query}` : ''}`;
+    const res = await request(endpoint);
+    return res.data;
+  },
+
+  async createEmployee(employeeData) {
+    const res = await request('/employees', {
+      method: 'POST',
+      body: JSON.stringify(employeeData)
+    });
+    return res.data;
+  },
+
+  async updateEmployee(id, updateData) {
+    const res = await request(`/employees/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updateData)
+    });
+    return res.data;
+  },
+
+  async deleteEmployee(id) {
+    const res = await request(`/employees/${id}`, {
+      method: 'DELETE'
+    });
+    return res.data;
   }
 };

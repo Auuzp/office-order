@@ -7,10 +7,12 @@ import CartModal from './components/CartModal';
 import OrderTracking from './components/OrderTracking';
 import AdminApproval from './components/AdminApproval';
 import AdminInventory from './components/AdminInventory';
+import AdminEmployees from './components/AdminEmployees';
 import { api, onUnauthorized } from './services/api';
 import { 
   INITIAL_PRODUCTS, 
   INITIAL_ORDERS, 
+  INITIAL_EMPLOYEES,
   DEPARTMENTS 
 } from './data/mockData';
 import { 
@@ -24,7 +26,7 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  // Products, Orders, and Departments (loaded safely from localStorage cache, then synced via Cloud API)
+  // Products, Orders, Departments, and Employees (loaded safely from localStorage cache, then synced via Cloud API)
   const [products, setProducts] = useState(() => {
     try {
       const saved = localStorage.getItem('office_products_v2');
@@ -62,6 +64,19 @@ export default function App() {
       console.warn('Failed to parse cached departments from localStorage:', e);
     }
     return DEPARTMENTS;
+  });
+
+  const [employees, setEmployees] = useState(() => {
+    try {
+      const saved = localStorage.getItem('office_employees_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.warn('Failed to parse cached employees from localStorage:', e);
+    }
+    return INITIAL_EMPLOYEES;
   });
 
   // Cloud Sync & Network State
@@ -118,20 +133,32 @@ export default function App() {
     }
   }, [departments]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('office_employees_v2', JSON.stringify(employees));
+    } catch (e) {
+      console.warn('Failed to save employees to localStorage:', e);
+    }
+  }, [employees]);
+
 
   // Fetch Cloud Data from Central Server
   const fetchCloudData = async (silent = false) => {
     if (!silent) setIsSyncing(true);
     try {
-      const [cloudItems, cloudOrders] = await Promise.all([
+      const [cloudItems, cloudOrders, cloudEmployees] = await Promise.all([
         api.getItems(),
-        api.getOrders()
+        api.getOrders(),
+        api.getEmployees().catch(() => null)
       ]);
       if (cloudItems && Array.isArray(cloudItems)) {
         setProducts(cloudItems);
       }
       if (cloudOrders && Array.isArray(cloudOrders)) {
         setOrders(cloudOrders);
+      }
+      if (cloudEmployees && Array.isArray(cloudEmployees)) {
+        setEmployees(cloudEmployees);
       }
       setIsOnline(true);
     } catch (err) {
@@ -474,6 +501,49 @@ export default function App() {
             />
           )}
 
+          {/* View 6: Admin Employees Management */}
+          {activeTab === 'admin-employees' && (
+            <AdminEmployees
+              employees={employees}
+              onAddEmployee={async (newEmp) => {
+                try {
+                  const created = await api.createEmployee(newEmp);
+                  setEmployees((prev) => [created, ...prev]);
+                  showToast(`เพิ่มพนักงาน "${newEmp.name}" เรียบร้อยแล้ว`);
+                  fetchCloudData(true);
+                } catch (err) {
+                  console.error('API createEmployee failed:', err);
+                  showToast(err.message || 'ไม่สามารถเพิ่มข้อมูลพนักงานได้', 'error');
+                }
+              }}
+              onUpdateEmployee={async (id, updateData) => {
+                try {
+                  const updated = await api.updateEmployee(id, updateData);
+                  setEmployees((prev) =>
+                    prev.map((emp) => (emp.id === id ? { ...emp, ...updated } : emp))
+                  );
+                  showToast('อัปเดตข้อมูลพนักงานเรียบร้อยแล้ว');
+                  fetchCloudData(true);
+                } catch (err) {
+                  console.error('API updateEmployee failed:', err);
+                  showToast(err.message || 'ไม่สามารถอัปเดตข้อมูลพนักงานได้', 'error');
+                }
+              }}
+              onDeleteEmployee={async (id) => {
+                try {
+                  await api.deleteEmployee(id);
+                  setEmployees((prev) => prev.filter((emp) => emp.id !== id));
+                  showToast('ลบข้อมูลพนักงานเรียบร้อยแล้ว');
+                  fetchCloudData(true);
+                } catch (err) {
+                  console.error('API deleteEmployee failed:', err);
+                  showToast(err.message || 'ไม่สามารถลบข้อมูลพนักงานได้', 'error');
+                }
+              }}
+              loading={isSyncing}
+            />
+          )}
+
         </main>
       </div>
 
@@ -488,6 +558,7 @@ export default function App() {
         onSubmitRequisition={handleSubmitRequisition}
         currentDepartment={currentDepartment}
         departments={departments}
+        employees={employees}
         isSubmitting={isSubmitting}
       />
 

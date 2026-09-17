@@ -497,6 +497,96 @@ app.post('/api/orders/:id/shipping', requireAdminAuth, async (req, res) => {
   }
 });
 
+// 8.2 Employee Management Endpoints (จัดการพนักงานในระบบ)
+app.get('/api/employees', async (req, res) => {
+  try {
+    const employees = await dbService.getEmployees(req.query);
+    res.json({ success: true, data: employees });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/api/employees/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const employee = await dbService.getEmployeeById(id);
+    if (!employee) {
+      return res.status(404).json({ success: false, message: 'ไม่พบข้อมูลพนักงาน' });
+    }
+    res.json({ success: true, data: employee });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/employees', requireAdminAuth, async (req, res) => {
+  const { name, employeeCode, company, department, departmentId, position, email, phone } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ success: false, message: 'กรุณากรอกชื่อ-นามสกุลพนักงาน' });
+  }
+
+  try {
+    const newId = req.body.id || `EMP-${Date.now().toString(36).toUpperCase()}`;
+    const newEmployee = {
+      id: newId,
+      employeeCode: employeeCode ? String(employeeCode).trim() : newId,
+      name: String(name).trim(),
+      company: company || 'Illuspace (Thailand) Co., Ltd.',
+      department: department || 'ฝ่ายเทคโนโลยีสารสนเทศ (IT)',
+      departmentId: departmentId || 'IT',
+      position: position ? String(position).trim() : 'พนักงาน',
+      email: email ? String(email).trim() : '',
+      phone: phone ? String(phone).trim() : '',
+      status: 'ACTIVE',
+      createdAt: new Date().toISOString()
+    };
+
+    const created = await dbService.createEmployee(newEmployee);
+    res.status(201).json({ success: true, data: created, message: 'เพิ่มข้อมูลพนักงานเรียบร้อยแล้ว' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.put('/api/employees/:id', requireAdminAuth, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const allowedFields = ['name', 'employeeCode', 'company', 'department', 'departmentId', 'position', 'email', 'phone', 'status'];
+    const updateData = {};
+    for (const key of allowedFields) {
+      if (req.body[key] !== undefined) {
+        updateData[key] = typeof req.body[key] === 'string' ? req.body[key].trim() : req.body[key];
+      }
+    }
+
+    if (updateData.name !== undefined && !updateData.name) {
+      return res.status(400).json({ success: false, message: 'ชื่อ-นามสกุลพนักงานต้องไม่เว้นว่าง' });
+    }
+
+    const updated = await dbService.updateEmployee(id, updateData);
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'ไม่พบข้อมูลพนักงานที่ต้องการแก้ไข' });
+    }
+    res.json({ success: true, data: updated, message: 'อัปเดตข้อมูลพนักงานเรียบร้อยแล้ว' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.delete('/api/employees/:id', requireAdminAuth, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const deleted = await dbService.deleteEmployee(id);
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: 'ไม่พบข้อมูลพนักงานที่ต้องการลบ' });
+    }
+    res.json({ success: true, data: deleted, message: 'ลบข้อมูลพนักงานเรียบร้อยแล้ว' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // 9. Dashboard Statistics
 app.get('/api/stats', async (req, res) => {
   try {
