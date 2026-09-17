@@ -28,13 +28,14 @@ loadEnvFile(path.join(__dirname, '..', '.env'));
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Proxy configuration
-const trustProxyConfig = process.env.TRUST_PROXY;
+// Proxy configuration (auto-detect Render cloud environment if not explicitly set)
+const trustProxyConfig = process.env.TRUST_PROXY || (process.env.RENDER ? '1' : undefined);
 if (trustProxyConfig !== undefined && trustProxyConfig !== 'false' && trustProxyConfig !== '') {
   app.set('trust proxy', trustProxyConfig === 'true' ? true : (isNaN(Number(trustProxyConfig)) ? trustProxyConfig : Number(trustProxyConfig)));
 } else {
   app.set('trust proxy', false);
 }
+
 
 
 const defaultOrigins = ['http://localhost:5173', 'http://localhost:3000', 'https://auuzp.github.io'];
@@ -216,14 +217,28 @@ app.post('/api/items', requireAdminAuth, async (req, res) => {
     return res.status(400).json({ success: false, message: 'กรุณากรอกชื่ออุปกรณ์' });
   }
 
+  const parsedPrice = price !== undefined ? parseFloat(price) : 50;
+  const parsedStock = stock !== undefined ? parseInt(stock, 10) : 0;
+  const parsedMinStock = minStock !== undefined ? parseInt(minStock, 10) : 5;
+
+  if (isNaN(parsedPrice) || parsedPrice < 0) {
+    return res.status(400).json({ success: false, message: 'ราคาต้องเป็นตัวเลขที่มากกว่าหรือเท่ากับ 0' });
+  }
+  if (isNaN(parsedStock) || parsedStock < 0) {
+    return res.status(400).json({ success: false, message: 'จำนวนสต็อกต้องเป็นจำนวนเต็มบวกหรือ 0' });
+  }
+  if (isNaN(parsedMinStock) || parsedMinStock < 0) {
+    return res.status(400).json({ success: false, message: 'จำนวนสต็อกขั้นต่ำต้องเป็นจำนวนเต็มบวกหรือ 0' });
+  }
+
   const newItem = {
     id: id || `SKU-${Date.now().toString().slice(-4)}`,
     name: name.trim(),
     category: category || 'อุปกรณ์ทั่วไป',
-    price: price !== undefined ? parseFloat(price) : 50,
-    stock: parseInt(stock, 10) || 0,
+    price: parsedPrice,
+    stock: parsedStock,
     unit: unit || 'ชิ้น',
-    minStock: parseInt(minStock, 10) || 5,
+    minStock: parsedMinStock,
     isPopular: !!req.body.isPopular,
     rating: req.body.rating !== undefined ? parseFloat(req.body.rating) : 4.8,
     description: description || '',
@@ -247,12 +262,31 @@ app.put('/api/items/:id', requireAdminAuth, async (req, res) => {
     const updateData = {};
     for (const key of allowedFields) {
       if (req.body[key] !== undefined) {
-        if (key === 'stock') updateData.stock = parseInt(req.body.stock, 10);
-        else if (key === 'minStock') updateData.minStock = parseInt(req.body.minStock, 10);
-        else if (key === 'price') updateData.price = parseFloat(req.body.price);
-        else if (key === 'rating') updateData.rating = parseFloat(req.body.rating);
-        else if (key === 'isPopular') updateData.isPopular = Boolean(req.body.isPopular);
-        else updateData[key] = req.body[key];
+        if (key === 'stock') {
+          const s = parseInt(req.body.stock, 10);
+          if (isNaN(s) || s < 0) {
+            return res.status(400).json({ success: false, message: 'จำนวนสต็อกต้องเป็นจำนวนเต็มบวกหรือ 0' });
+          }
+          updateData.stock = s;
+        } else if (key === 'minStock') {
+          const ms = parseInt(req.body.minStock, 10);
+          if (isNaN(ms) || ms < 0) {
+            return res.status(400).json({ success: false, message: 'จำนวนสต็อกขั้นต่ำต้องเป็นจำนวนเต็มบวกหรือ 0' });
+          }
+          updateData.minStock = ms;
+        } else if (key === 'price') {
+          const p = parseFloat(req.body.price);
+          if (isNaN(p) || p < 0) {
+            return res.status(400).json({ success: false, message: 'ราคาต้องเป็นตัวเลขที่มากกว่าหรือเท่ากับ 0' });
+          }
+          updateData.price = p;
+        } else if (key === 'rating') {
+          updateData.rating = parseFloat(req.body.rating);
+        } else if (key === 'isPopular') {
+          updateData.isPopular = Boolean(req.body.isPopular);
+        } else {
+          updateData[key] = req.body[key];
+        }
       }
     }
 
@@ -265,6 +299,7 @@ app.put('/api/items/:id', requireAdminAuth, async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 });
+
 
 // 4. Delete equipment
 app.delete('/api/items/:id', requireAdminAuth, async (req, res) => {
@@ -368,13 +403,9 @@ app.post('/api/orders', async (req, res) => {
       });
     }
 
-    // Always generate unique, collision-resistant server-side order ID
-    const timestampStr = Date.now().toString().slice(-4);
-    const randomHex = crypto.randomBytes(3).toString('hex').toUpperCase();
-    const orderId = `REQ-${new Date().getFullYear()}-${timestampStr}-${randomHex}`;
-
+    // Generate collision-resistant order ID with concurrency retry
     const newOrder = {
-      id: orderId,
+      id: '',
       createdAt: new Date().toISOString(),
       requesterName: requesterName.trim(),
       company: normalizedCompany || 'Illuspace (Thailand) Co., Ltd.',
@@ -390,7 +421,20 @@ app.post('/api/orders', async (req, res) => {
       items: resolvedItems
     };
 
-    const created = await dbService.createOrder(newOrder);
+    let created = null;
+    let attempts = 0;
+    while (!created && attempts < 3) {
+      attempts++;
+      const timestampStr = Date.now().toString().slice(-4);
+      const randomHex = crypto.randomBytes(4).toString('hex').toUpperCase();
+      newOrder.id = `REQ-${new Date().getFullYear()}-${timestampStr}-${randomHex}`;
+      try {
+        created = await dbService.createOrder(newOrder);
+      } catch (err) {
+        if (attempts >= 3) throw err;
+      }
+    }
+
     res.status(201).json({ 
       success: true, 
       data: created, 
@@ -400,6 +444,7 @@ app.post('/api/orders', async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 });
+
 
 // 7. Approve order (อนุมัติโดย Admin พร้อมตัดสต็อกอัตโนมัติ)
 app.post('/api/orders/:id/approve', requireAdminAuth, async (req, res) => {

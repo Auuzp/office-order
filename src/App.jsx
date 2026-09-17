@@ -24,20 +24,44 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  // Products, Orders, and Departments (loaded from localStorage cache on first render, then synced via Cloud API)
+  // Products, Orders, and Departments (loaded safely from localStorage cache, then synced via Cloud API)
   const [products, setProducts] = useState(() => {
-    const saved = localStorage.getItem('office_products_v2');
-    return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+    try {
+      const saved = localStorage.getItem('office_products_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.warn('Failed to parse cached products from localStorage:', e);
+    }
+    return INITIAL_PRODUCTS;
   });
 
   const [orders, setOrders] = useState(() => {
-    const saved = localStorage.getItem('office_orders_v2');
-    return saved ? JSON.parse(saved) : INITIAL_ORDERS;
+    try {
+      const saved = localStorage.getItem('office_orders_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.warn('Failed to parse cached orders from localStorage:', e);
+    }
+    return INITIAL_ORDERS;
   });
 
   const [departments, setDepartments] = useState(() => {
-    const saved = localStorage.getItem('office_departments_v2');
-    return saved ? JSON.parse(saved) : DEPARTMENTS;
+    try {
+      const saved = localStorage.getItem('office_departments_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.warn('Failed to parse cached departments from localStorage:', e);
+    }
+    return DEPARTMENTS;
   });
 
   // Cloud Sync & Network State
@@ -69,18 +93,31 @@ export default function App() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  // Sync to localStorage as offline cache
+  // Sync to localStorage as offline cache with error handling
   useEffect(() => {
-    localStorage.setItem('office_products_v2', JSON.stringify(products));
+    try {
+      localStorage.setItem('office_products_v2', JSON.stringify(products));
+    } catch (e) {
+      console.warn('Failed to save products to localStorage:', e);
+    }
   }, [products]);
 
   useEffect(() => {
-    localStorage.setItem('office_orders_v2', JSON.stringify(orders));
+    try {
+      localStorage.setItem('office_orders_v2', JSON.stringify(orders));
+    } catch (e) {
+      console.warn('Failed to save orders to localStorage:', e);
+    }
   }, [orders]);
 
   useEffect(() => {
-    localStorage.setItem('office_departments_v2', JSON.stringify(departments));
+    try {
+      localStorage.setItem('office_departments_v2', JSON.stringify(departments));
+    } catch (e) {
+      console.warn('Failed to save departments to localStorage:', e);
+    }
   }, [departments]);
+
 
   // Fetch Cloud Data from Central Server
   const fetchCloudData = async (silent = false) => {
@@ -237,10 +274,13 @@ export default function App() {
   const handleShippingOrder = async (orderId) => {
     try {
       const updatedOrder = await api.shipOrder(orderId);
-      setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? (updatedOrder || { ...o, status: 'SHIPPING' }) : o))
-      );
+      if (updatedOrder) {
+        setOrders((prev) =>
+          prev.map((o) => (o.id === orderId ? updatedOrder : o))
+        );
+      }
       showToast(`อัปเดตคำขอ ${orderId} เป็น "กำลังจัดส่ง" แล้ว`, 'info');
+      fetchCloudData(true);
     } catch (err) {
       console.error('API shipping failed:', err);
       showToast(err.message || `ไม่สามารถอัปเดตสถานะคำขอ ${orderId} ได้`, 'error');
@@ -251,15 +291,19 @@ export default function App() {
   const handleRejectOrder = async (orderId, reason) => {
     try {
       const updatedOrder = await api.rejectOrder(orderId, reason);
-      setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? (updatedOrder || { ...o, status: 'REJECTED', rejectReason: reason }) : o))
-      );
+      if (updatedOrder) {
+        setOrders((prev) =>
+          prev.map((o) => (o.id === orderId ? updatedOrder : o))
+        );
+      }
       showToast(`ปฏิเสธคำขอ ${orderId} เรียบร้อยแล้ว`, 'info');
+      fetchCloudData(true);
     } catch (err) {
       console.error('API reject failed:', err);
       showToast(err.message || `ไม่สามารถปฏิเสธคำขอ ${orderId} ได้`, 'error');
     }
   };
+
 
   // Switch Role
   const handleRoleToggleClick = async () => {
