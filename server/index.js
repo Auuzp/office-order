@@ -16,6 +16,7 @@ import {
   extractToken,
   requireAdminAuth
 } from './auth.js';
+import { dbService } from './firebase.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -186,12 +187,17 @@ app.get('/api/auth/session', (req, res) => {
 // API Endpoints
 
 // 1. Get all equipment items
-app.get('/api/items', (req, res) => {
-  res.json({ success: true, data: items });
+app.get('/api/items', async (req, res) => {
+  try {
+    const items = await dbService.getItems();
+    res.json({ success: true, data: items });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // 2. Add new equipment (Admin เพิ่มรายการอุปกรณ์เข้าไปในระบบ)
-app.post('/api/items', requireAdminAuth, (req, res) => {
+app.post('/api/items', requireAdminAuth, async (req, res) => {
   const { name, category, stock, unit, minStock, description, imageUrl, price, id } = req.body;
   
   if (!name || name.trim() === '') {
@@ -213,78 +219,63 @@ app.post('/api/items', requireAdminAuth, (req, res) => {
     createdAt: new Date().toISOString()
   };
 
-  items.unshift(newItem);
-  saveData(ITEMS_FILE, items);
-
-  res.status(201).json({ success: true, data: newItem, message: 'เพิ่มอุปกรณ์เรียบร้อยแล้ว' });
+  try {
+    const created = await dbService.createItem(newItem);
+    res.status(201).json({ success: true, data: created, message: 'เพิ่มอุปกรณ์เรียบร้อยแล้ว' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // 3. Update equipment / Restock
-app.put('/api/items/:id', requireAdminAuth, (req, res) => {
+app.put('/api/items/:id', requireAdminAuth, async (req, res) => {
   const { id } = req.params;
-  const index = items.findIndex(i => i.id === id);
-  if (index === -1) {
-    return res.status(404).json({ success: false, message: 'ไม่พบอุปกรณ์ที่ต้องการแก้ไข' });
+  try {
+    const updateData = {
+      ...req.body,
+      stock: req.body.stock !== undefined ? parseInt(req.body.stock, 10) : undefined,
+      minStock: req.body.minStock !== undefined ? parseInt(req.body.minStock, 10) : undefined,
+      price: req.body.price !== undefined ? parseFloat(req.body.price) : undefined
+    };
+    Object.keys(updateData).forEach((k) => updateData[k] === undefined && delete updateData[k]);
+    delete updateData.id;
+
+    const updated = await dbService.updateItem(id, updateData);
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'ไม่พบอุปกรณ์ที่ต้องการแก้ไข' });
+    }
+    res.json({ success: true, data: updated, message: 'อัปเดตข้อมูลอุปกรณ์เรียบร้อยแล้ว' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
-
-  const current = items[index];
-  const updated = {
-    ...current,
-    ...req.body,
-    id: current.id, // protect ID
-    stock: req.body.stock !== undefined ? parseInt(req.body.stock, 10) : current.stock,
-    minStock: req.body.minStock !== undefined ? parseInt(req.body.minStock, 10) : current.minStock,
-    price: req.body.price !== undefined ? parseFloat(req.body.price) : current.price
-  };
-
-  items[index] = updated;
-  saveData(ITEMS_FILE, items);
-
-  res.json({ success: true, data: updated, message: 'อัปเดตข้อมูลอุปกรณ์เรียบร้อยแล้ว' });
 });
 
 // 4. Delete equipment
-app.delete('/api/items/:id', requireAdminAuth, (req, res) => {
+app.delete('/api/items/:id', requireAdminAuth, async (req, res) => {
   const { id } = req.params;
-  const index = items.findIndex(i => i.id === id);
-  if (index === -1) {
-    return res.status(404).json({ success: false, message: 'ไม่พบอุปกรณ์ที่ต้องการลบ' });
+  try {
+    const deleted = await dbService.deleteItem(id);
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: 'ไม่พบอุปกรณ์ที่ต้องการลบ' });
+    }
+    res.json({ success: true, data: deleted, message: 'ลบอุปกรณ์เรียบร้อยแล้ว' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
-
-  const deleted = items.splice(index, 1);
-  saveData(ITEMS_FILE, items);
-
-  res.json({ success: true, data: deleted[0], message: 'ลบอุปกรณ์เรียบร้อยแล้ว' });
 });
 
 // 5. Get all orders (with optional filters)
-app.get('/api/orders', (req, res) => {
-  const { company, status, search } = req.query;
-  let filtered = [...orders];
-
-  if (company && company !== 'ALL') {
-    filtered = filtered.filter(o => o.company === company);
+app.get('/api/orders', async (req, res) => {
+  try {
+    const filtered = await dbService.getOrders(req.query);
+    res.json({ success: true, data: filtered });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
-  if (status && status !== 'ALL') {
-    filtered = filtered.filter(o => o.status === status);
-  }
-  if (search) {
-    const q = search.toLowerCase();
-    filtered = filtered.filter(o => 
-      o.requesterName.toLowerCase().includes(q) ||
-      o.id.toLowerCase().includes(q) ||
-      o.items.some(i => i.itemName.toLowerCase().includes(q))
-    );
-  }
-
-  // Sort latest first
-  filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-  res.json({ success: true, data: filtered });
 });
 
 // 6. Submit new order (พนักงานกดสั่งซื้ออุปกรณ์)
-app.post('/api/orders', (req, res) => {
+app.post('/api/orders', async (req, res) => {
   const { requesterName, company, department, reason, reasonDetail, items: requestedItems } = req.body;
 
   // Validation
@@ -306,205 +297,130 @@ app.post('/api/orders', (req, res) => {
     return res.status(400).json({ success: false, message: 'กรุณาเลือกอุปกรณ์ที่ต้องการสั่งซื้ออย่างน้อย 1 รายการ' });
   }
 
-  // Validate stock sufficiency at the time of requisition
-  const resolvedItems = [];
-  let calculatedCost = 0;
+  try {
+    const currentItems = await dbService.getItems();
+    const resolvedItems = [];
+    let calculatedCost = 0;
 
-  for (const reqItem of requestedItems) {
-    const targetId = reqItem.itemId || reqItem.id;
-    const itemInStock = items.find(i => i.id === targetId || i.name === reqItem.itemName || i.name === reqItem.name);
-    const qty = parseInt(reqItem.quantity, 10) || 1;
-    const itemName = reqItem.itemName || reqItem.name || itemInStock?.name || 'อุปกรณ์';
-    const unit = reqItem.unit || itemInStock?.unit || 'ชิ้น';
-    const price = reqItem.price !== undefined ? parseFloat(reqItem.price) : (itemInStock?.price || 0);
+    for (const reqItem of requestedItems) {
+      const targetId = reqItem.itemId || reqItem.id;
+      const itemInStock = currentItems.find((i) => i.id === targetId || i.name === reqItem.itemName || i.name === reqItem.name);
+      const qty = parseInt(reqItem.quantity, 10) || 1;
+      const itemName = reqItem.itemName || reqItem.name || itemInStock?.name || 'อุปกรณ์';
+      const unit = reqItem.unit || itemInStock?.unit || 'ชิ้น';
+      const price = reqItem.price !== undefined ? parseFloat(reqItem.price) : (itemInStock?.price || 0);
 
-    if (itemInStock && qty > itemInStock.stock) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `จำนวนคงเหลือของ "${itemInStock.name}" มีเพียง ${itemInStock.stock} ${itemInStock.unit} (สั่งขอ: ${qty})` 
+      if (itemInStock && qty > itemInStock.stock) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `จำนวนคงเหลือของ "${itemInStock.name}" มีเพียง ${itemInStock.stock} ${itemInStock.unit} (สั่งขอ: ${qty})` 
+        });
+      }
+
+      calculatedCost += price * qty;
+      resolvedItems.push({
+        itemId: targetId || itemInStock?.id || `SKU-${Date.now()}`,
+        itemName,
+        quantity: qty,
+        unit,
+        price
       });
     }
 
-    calculatedCost += price * qty;
-    resolvedItems.push({
-      itemId: targetId || itemInStock?.id || `SKU-${Date.now()}`,
-      itemName,
-      quantity: qty,
-      unit,
-      price
+    const existingOrders = await dbService.getOrders();
+    const orderNum = existingOrders.length + 1;
+    const orderId = `REQ-${new Date().getFullYear()}-${String(orderNum).padStart(3, '0')}`;
+
+    const newOrder = {
+      id: req.body.id || orderId,
+      createdAt: req.body.createdAt || new Date().toISOString(),
+      requesterName: requesterName.trim(),
+      company: normalizedCompany || 'Illuspace (Thailand) Co., Ltd.',
+      department: department ? department.trim() : '',
+      departmentId: req.body.departmentId || '',
+      reason: reason || 'อุปกรณ์หมด/ใช้งานเพิ่ม',
+      priority: req.body.priority || 'ปกติ',
+      reasonDetail: reasonDetail ? reasonDetail.trim() : '',
+      totalCost: req.body.totalCost !== undefined ? parseFloat(req.body.totalCost) : calculatedCost,
+      status: req.body.status || 'PENDING',
+      approvedBy: null,
+      approvedAt: null,
+      items: resolvedItems
+    };
+
+    const created = await dbService.createOrder(newOrder);
+    res.status(201).json({ 
+      success: true, 
+      data: created, 
+      message: `ส่งคำสั่งซื้อ ${created.id} สำเร็จแล้ว รอผู้ดูแลระบบ (Admin) อนุมัติ` 
     });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
-
-  const orderNum = orders.length + 1;
-  const orderId = `REQ-${new Date().getFullYear()}-${String(orderNum).padStart(3, '0')}`;
-
-  const newOrder = {
-    id: req.body.id || orderId,
-    createdAt: req.body.createdAt || new Date().toISOString(),
-    requesterName: requesterName.trim(),
-    company: normalizedCompany || 'Illuspace (Thailand) Co., Ltd.',
-    department: department ? department.trim() : '',
-    departmentId: req.body.departmentId || '',
-    reason: reason || 'อุปกรณ์หมด/ใช้งานเพิ่ม',
-    priority: req.body.priority || 'ปกติ',
-    reasonDetail: reasonDetail ? reasonDetail.trim() : '',
-    totalCost: req.body.totalCost !== undefined ? parseFloat(req.body.totalCost) : calculatedCost,
-    status: req.body.status || 'PENDING', // รอ Admin อนุมัติ
-    approvedBy: null,
-    approvedAt: null,
-    items: resolvedItems
-  };
-
-  orders.unshift(newOrder);
-  saveData(ORDERS_FILE, orders);
-
-  res.status(201).json({ 
-    success: true, 
-    data: newOrder, 
-    message: `ส่งคำสั่งซื้อ ${newOrder.id} สำเร็จแล้ว รอผู้ดูแลระบบ (Admin) อนุมัติ` 
-  });
 });
 
 // 7. Approve order (อนุมัติโดย Admin พร้อมตัดสต็อกอัตโนมัติ)
-app.post('/api/orders/:id/approve', requireAdminAuth, (req, res) => {
+app.post('/api/orders/:id/approve', requireAdminAuth, async (req, res) => {
   const { id } = req.params;
-  const orderIndex = orders.findIndex(o => o.id === id);
-  if (orderIndex === -1) {
-    return res.status(404).json({ success: false, message: 'ไม่พบคำสั่งซื้อนี้' });
+  try {
+    const order = await dbService.approveOrderWithStockDeduction(id, 'Admin (ผู้ดูแลระบบ)');
+    const allItems = await dbService.getItems();
+    res.json({ 
+      success: true, 
+      data: order, 
+      items: allItems,
+      message: `อนุมัติคำสั่งซื้อ ${order.id} เรียบร้อยแล้ว (ตัดสต็อกอุปกรณ์สำเร็จ)` 
+    });
+  } catch (err) {
+    const status = err.message.includes('ไม่พบ') ? 404 : 400;
+    res.status(status).json({ success: false, message: err.message });
   }
-
-  const order = orders[orderIndex];
-  if (order.status === 'APPROVED') {
-    return res.status(400).json({ success: false, message: 'คำสั่งซื้อนี้ได้รับการอนุมัติไปแล้ว' });
-  }
-
-  // Deduct stock if item found
-  for (const reqItem of order.items) {
-    const invItem = items.find(i => i.id === reqItem.itemId || i.name === reqItem.itemName);
-    if (invItem) {
-      invItem.stock = Math.max(0, invItem.stock - reqItem.quantity);
-    }
-  }
-  saveData(ITEMS_FILE, items);
-
-  // Update order status
-  order.status = 'APPROVED';
-  order.approvedBy = 'Admin (ผู้ดูแลระบบ)';
-  order.approvedAt = new Date().toISOString();
-  saveData(ORDERS_FILE, orders);
-
-  res.json({ 
-    success: true, 
-    data: order, 
-    items,
-    message: `อนุมัติคำสั่งซื้อ ${order.id} เรียบร้อยแล้ว (ตัดสต็อกอุปกรณ์สำเร็จ)` 
-  });
 });
 
 // 8. Reject order (ปฏิเสธโดย Admin)
-app.post('/api/orders/:id/reject', requireAdminAuth, (req, res) => {
+app.post('/api/orders/:id/reject', requireAdminAuth, async (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
-  const orderIndex = orders.findIndex(o => o.id === id);
-  if (orderIndex === -1) {
-    return res.status(404).json({ success: false, message: 'ไม่พบคำสั่งซื้อนี้' });
+  try {
+    const order = await dbService.rejectOrder(id, reason, 'Admin (ผู้ดูแลระบบ)');
+    res.json({ 
+      success: true, 
+      data: order, 
+      message: `ปฏิเสธคำสั่งซื้อ ${order.id} เรียบร้อยแล้ว` 
+    });
+  } catch (err) {
+    const status = err.message.includes('ไม่พบ') ? 404 : 400;
+    res.status(status).json({ success: false, message: err.message });
   }
-
-  const order = orders[orderIndex];
-  if (order.status === 'APPROVED') {
-    return res.status(400).json({ success: false, message: 'คำสั่งซื้อนี้ได้รับการอนุมัติแล้ว ไม่สามารถปฏิเสธย้อนหลังได้' });
-  }
-
-  order.status = 'REJECTED';
-  order.approvedBy = 'Admin (ผู้ดูแลระบบ)';
-  order.rejectedBy = 'Admin (ผู้ดูแลระบบ)';
-  order.rejectReason = reason || 'ไม่อนุมัติคำสั่งซื้อ';
-  order.approvedAt = new Date().toISOString();
-  saveData(ORDERS_FILE, orders);
-
-  res.json({ 
-    success: true, 
-    data: order, 
-    message: `ปฏิเสธคำสั่งซื้อ ${order.id} เรียบร้อยแล้ว` 
-  });
 });
 
 // 8.1 Mark as Shipping (กำลังจัดส่ง)
-app.post('/api/orders/:id/shipping', requireAdminAuth, (req, res) => {
+app.post('/api/orders/:id/shipping', requireAdminAuth, async (req, res) => {
   const { id } = req.params;
-  const order = orders.find(o => o.id === id);
-  if (!order) {
-    return res.status(404).json({ success: false, message: 'ไม่พบคำสั่งซื้อนี้' });
+  try {
+    const order = await dbService.shipOrder(id);
+    res.json({ 
+      success: true, 
+      data: order, 
+      message: `อัปเดตสถานะคำสั่งซื้อ ${order.id} เป็น "กำลังจัดส่ง" แล้ว` 
+    });
+  } catch (err) {
+    const status = err.message.includes('ไม่พบ') ? 404 : 400;
+    res.status(status).json({ success: false, message: err.message });
   }
-
-  order.status = 'SHIPPING';
-  saveData(ORDERS_FILE, orders);
-
-  res.json({ 
-    success: true, 
-    data: order, 
-    message: `อัปเดตสถานะคำสั่งซื้อ ${order.id} เป็น "กำลังจัดส่ง" แล้ว` 
-  });
 });
 
 // 9. Dashboard Statistics
-app.get('/api/stats', (req, res) => {
-  const totalOrders = orders.length;
-  const pendingOrders = orders.filter(o => o.status === 'PENDING').length;
-  const approvedOrders = orders.filter(o => o.status === 'APPROVED').length;
-  const rejectedOrders = orders.filter(o => o.status === 'REJECTED').length;
-
-  const lowStockItems = items.filter(i => i.stock <= i.minStock);
-
-  // Company breakdown
-  const companyCounts = {
-    'Illuspace (Thailand) Co., Ltd.': 0,
-    'Live Lighting Co., Ltd.': 0,
-    'True Innovation Tech Co., Ltd.': 0,
-    Illu: 0,
-    LL: 0,
-    True: 0
-  };
-  orders.forEach(o => {
-    if (o.company === 'Illu' || o.company?.includes('Illuspace')) {
-      companyCounts['Illuspace (Thailand) Co., Ltd.']++;
-      companyCounts.Illu++;
-    } else if (o.company === 'LL' || o.company?.includes('Live Lighting')) {
-      companyCounts['Live Lighting Co., Ltd.']++;
-      companyCounts.LL++;
-    } else if (o.company === 'True' || o.company?.includes('True Innovation')) {
-      companyCounts['True Innovation Tech Co., Ltd.']++;
-      companyCounts.True++;
-    }
-  });
-
-  // Reason breakdown
-  const reasonCounts = {
-    'ชำรุด': 0,
-    'สูญหาย': 0,
-    'ไม่เคยได้รับ': 0,
-    'พนักงานใหม่': 0
-  };
-  orders.forEach(o => {
-    if (reasonCounts[o.reason] !== undefined) {
-      reasonCounts[o.reason]++;
-    }
-  });
-
-  res.json({
-    success: true,
-    data: {
-      totalOrders,
-      pendingOrders,
-      approvedOrders,
-      rejectedOrders,
-      totalItemsCount: items.length,
-      lowStockItemsCount: lowStockItems.length,
-      lowStockItems,
-      companyCounts,
-      reasonCounts
-    }
-  });
+app.get('/api/stats', async (req, res) => {
+  try {
+    const stats = await dbService.getStats();
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // 10. Serve client in production
