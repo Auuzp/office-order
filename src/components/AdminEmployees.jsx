@@ -47,13 +47,19 @@ export default function AdminEmployees({
   // Filtered employees
   const filteredEmployees = employees.filter((emp) => {
     const q = searchQuery.toLowerCase();
-    const matchSearch =
-      (emp.name && emp.name.toLowerCase().includes(q)) ||
-      (emp.employeeCode && emp.employeeCode.toLowerCase().includes(q)) ||
-      (emp.position && emp.position.toLowerCase().includes(q)) ||
-      (emp.email && emp.email.toLowerCase().includes(q));
+    const code = String(emp.employeeCode || emp.emp_code || emp.id || '').toLowerCase();
+    const name = String(emp.name || '').toLowerCase();
+    const pos = String(emp.position || '').toLowerCase();
+    const email = String(emp.email || '').toLowerCase();
 
-    const matchCompany = selectedCompany === 'ALL' || emp.company === selectedCompany;
+    const matchSearch =
+      name.includes(q) ||
+      code.includes(q) ||
+      pos.includes(q) ||
+      email.includes(q);
+
+    const empCompany = emp.company || 'Illuspace (Thailand) Co., Ltd.';
+    const matchCompany = selectedCompany === 'ALL' || empCompany === selectedCompany;
     const matchDepartment = selectedDepartment === 'ALL' || emp.departmentId === selectedDepartment || emp.department === selectedDepartment;
 
     return matchSearch && matchCompany && matchDepartment;
@@ -78,13 +84,13 @@ export default function AdminEmployees({
     setEditingEmployee(emp);
     setFormData({
       name: emp.name || '',
-      employeeCode: emp.employeeCode || emp.id || '',
+      employeeCode: emp.employeeCode || emp.emp_code || emp.id || '',
       company: emp.company || COMPANIES[0]?.id,
-      departmentId: emp.departmentId || 'IT',
+      departmentId: emp.departmentId || (emp.department?.includes('IT') ? 'IT' : emp.department?.includes('HR') ? 'HR' : 'IT'),
       position: emp.position || '',
       email: emp.email || '',
       phone: emp.phone || '',
-      status: emp.status || 'ACTIVE'
+      status: emp.status || (emp.is_active === 0 ? 'INACTIVE' : 'ACTIVE')
     });
     setIsModalOpen(true);
   };
@@ -273,21 +279,21 @@ export default function AdminEmployees({
                         </div>
                         <div>
                           <div className="font-semibold text-slate-900 text-xs sm:text-sm">{emp.name}</div>
-                          <div className="text-[11px] text-slate-400 font-mono">{emp.employeeCode || emp.id}</div>
+                          <div className="text-[11px] text-slate-400 font-mono">{emp.employeeCode || emp.emp_code || emp.id}</div>
                         </div>
                       </div>
                     </td>
 
                     {/* Company */}
                     <td className="py-3.5 px-4">
-                      <span className={`inline-block px-2.5 py-1 rounded-lg text-[11px] font-medium border ${getCompanyBadgeClass(emp.company)}`}>
-                        {emp.company}
+                      <span className={`inline-block px-2.5 py-1 rounded-lg text-[11px] font-medium border ${getCompanyBadgeClass(emp.company || 'Illuspace (Thailand) Co., Ltd.')}`}>
+                        {emp.company || 'Illuspace (Thailand) Co., Ltd.'}
                       </span>
                     </td>
 
                     {/* Department & Position */}
                     <td className="py-3.5 px-4">
-                      <div className="font-medium text-slate-800">{emp.department || emp.departmentId}</div>
+                      <div className="font-medium text-slate-800">{emp.department || emp.departmentId || '-'}</div>
                       <div className="text-[11px] text-slate-400">{emp.position || 'พนักงาน'}</div>
                     </td>
 
@@ -313,12 +319,12 @@ export default function AdminEmployees({
                     {/* Status */}
                     <td className="py-3.5 px-4 text-center">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                        emp.status === 'INACTIVE'
+                        emp.status === 'INACTIVE' || emp.is_active === 0
                           ? 'bg-slate-100 text-slate-600 border border-slate-200'
                           : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                       }`}>
-                        <span className={`w-1.5 h-1.5 rounded-full mr-1 ${emp.status === 'INACTIVE' ? 'bg-slate-400' : 'bg-emerald-500'}`}></span>
-                        {emp.status === 'INACTIVE' ? 'ไม่ใช้งาน' : 'ปกติ (Active)'}
+                        <span className={`w-1.5 h-1.5 rounded-full mr-1 ${emp.status === 'INACTIVE' || emp.is_active === 0 ? 'bg-slate-400' : 'bg-emerald-500'}`}></span>
+                        {emp.status === 'INACTIVE' || emp.is_active === 0 ? 'ไม่ใช้งาน' : 'ปกติ (Active)'}
                       </span>
                     </td>
 
